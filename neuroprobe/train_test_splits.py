@@ -1,10 +1,11 @@
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
 from sklearn.model_selection import KFold
-from braintreebank_subject import BrainTreebankSubject
-from btbench_datasets import BrainTreebankSubjectTrialBenchmarkDataset
 import numpy as np
-from btbench_config import *
+
+from .braintreebank_subject import BrainTreebankSubject
+from .datasets import BrainTreebankSubjectTrialBenchmarkDataset
+from .config import *
 
 
 def generate_splits_DS_DM(all_subjects, test_subject_id, test_trial_id, eval_name, dtype=torch.float32,
@@ -26,7 +27,7 @@ def generate_splits_DS_DM(all_subjects, test_subject_id, test_trial_id, eval_nam
         test_trial_id (int): ID of the trial/movie to use as test set
         eval_name (str): Name of the evaluation metric to use (e.g. "rms")
         dtype (torch.dtype, optional): Data type for tensors. Defaults to torch.float32.
-        lite (bool): if True, the eval is BTBench-Lite (the default), otherwise it is BTBench-Full.
+        lite (bool): if True, the eval is Neuroprobe-Lite (the default), otherwise it is Neuroprobe-Full.
         allow_partial_cache (bool): if True, the dataset will allow partial caching of the neural data. Defaults to True.
 
         # Dataset parameters
@@ -72,7 +73,7 @@ def generate_splits_DS_SM(all_subjects, test_subject_id, test_trial_id, eval_nam
         test_trial_id (int): ID of the trial/movie to use as test set
         eval_name (str): Name of the evaluation metric to use (e.g. "rms")
         dtype (torch.dtype, optional): Data type for tensors. Defaults to torch.float32.
-        lite (bool): if True, the eval is BTBench-Lite (the default), otherwise it is BTBench-Full.
+        lite (bool): if True, the eval is Neuroprobe-Lite (the default), otherwise it is Neuroprobe-Full.
         allow_partial_cache (bool): if True, the dataset will allow partial caching of the neural data. Defaults to True.
 
         # Dataset parameters
@@ -87,7 +88,7 @@ def generate_splits_DS_SM(all_subjects, test_subject_id, test_trial_id, eval_nam
     """
     test_movie_name = BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{test_subject_id}_{test_trial_id}"]
     other_subject_trials_list = []
-    for subject_id, trial_id in BTBENCH_LITE_SUBJECT_TRIALS if lite else BTBENCH_FULL_SUBJECT_TRIALS:
+    for subject_id, trial_id in NEUROPROBE_LITE_SUBJECT_TRIALS if lite else NEUROPROBE_FULL_SUBJECT_TRIALS:
         if BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{subject_id}_{trial_id}"] == test_movie_name and subject_id != test_subject_id:
             other_subject_trials_list.append((subject_id, trial_id))
 
@@ -124,7 +125,7 @@ def generate_splits_SS_DM(test_subject, test_trial_id, eval_name, dtype=torch.fl
         eval_name (str): Name of the evaluation metric to use (e.g. "rms")
         dtype (torch.dtype, optional): Data type for tensors. Defaults to torch.float32.
         max_other_trials (int, optional): Maximum number of other trials to include in the training set. Defaults to 2.
-        lite (bool): if True, the eval is BTBench-Lite (the default), otherwise it is BTBench-Full.
+        lite (bool): if True, the eval is Neuroprobe-Lite (the default), otherwise it is Neuroprobe-Full.
         allow_partial_cache (bool): if True, the dataset will allow partial caching of the neural data. Defaults to True.
 
         # Dataset parameters
@@ -137,7 +138,7 @@ def generate_splits_SS_DM(test_subject, test_trial_id, eval_name, dtype=torch.fl
             - train_datasets (list): List of training datasets
             - test_dataset (Dataset): Dataset for the test trial
     """
-    assert len(BTBENCH_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id]) > 1, f"Training subject must have at least two trials. But subject {test_subject.subject_id} has only {len(BTBENCH_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id])} trials."
+    assert len(NEUROPROBE_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id]) > 1, f"Training subject must have at least two trials. But subject {test_subject.subject_id} has only {len(NEUROPROBE_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id])} trials."
 
     
     test_dataset = BrainTreebankSubjectTrialBenchmarkDataset(test_subject, test_trial_id, dtype=dtype, eval_name=eval_name, 
@@ -145,11 +146,11 @@ def generate_splits_SS_DM(test_subject, test_trial_id, eval_name, dtype=torch.fl
                                                              lite=lite, allow_partial_cache=allow_partial_cache)
     
     if not lite:
-        train_trial_id = BTBENCH_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id][0]
+        train_trial_id = NEUROPROBE_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id][0]
         if train_trial_id == test_trial_id:
-            train_trial_id = BTBENCH_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id][1] # If the longest trial is the test trial, use the second longest trial for training
+            train_trial_id = NEUROPROBE_LONGEST_TRIALS_FOR_SUBJECT[test_subject.subject_id][1] # If the longest trial is the test trial, use the second longest trial for training
     else:
-        train_trial_id = [trial_id for subject_id, trial_id in BTBENCH_LITE_SUBJECT_TRIALS if subject_id == test_subject.subject_id and trial_id != test_trial_id][0] # Get the first other trial for the training set (there should only be one)
+        train_trial_id = [trial_id for subject_id, trial_id in NEUROPROBE_LITE_SUBJECT_TRIALS if subject_id == test_subject.subject_id and trial_id != test_trial_id][0] # Get the first other trial for the training set (there should only be one)
     
 
     train_dataset = BrainTreebankSubjectTrialBenchmarkDataset(test_subject, train_trial_id, dtype=dtype, eval_name=eval_name, 
@@ -179,7 +180,7 @@ def generate_splits_SS_SM(test_subject, test_trial_id, eval_name, k_folds=5, dty
         eval_name (str): Name of the evaluation metric to use (e.g. "rms", "word_gap", "pitch", "delta_volume")
         k_folds (int, optional): Number of folds for cross validation. Defaults to 5.
         dtype (torch.dtype, optional): Data type for tensors. Defaults to torch.float32.
-        lite (bool): if True, the eval is BTBench-Lite (the default), otherwise it is BTBench-Full.
+        lite (bool): if True, the eval is Neuroprobe-Lite (the default), otherwise it is Neuroprobe-Full.
         allow_partial_cache (bool): if True, the dataset will allow partial caching of the neural data. Defaults to True.
 
         # Dataset parameters
@@ -211,30 +212,3 @@ def generate_splits_SS_SM(test_subject, test_trial_id, eval_name, k_folds=5, dty
         test_datasets.append(Subset(dataset, test_idx))
 
     return train_datasets, test_datasets
-
-
-if __name__ == "__main__":
-    lite = True
-    eval_name = "volume"
-    test_subject_id, test_trial_id = 3, 0
-    all_subjects = {subject_id: BrainTreebankSubject(subject_id, cache=False) for subject_id in range(1, 11)}
-
-    print("= LOADING DATASETS = DS-DM (Different Subject Different Movie)")
-    train_datasets, test_datasets = generate_splits_DS_DM(all_subjects, test_subject_id, test_trial_id, eval_name, lite=lite)
-    print(train_datasets)
-    print(test_datasets)
-
-    print("= LOADING DATASETS = DS-SM (Different Subject Same Movie)")
-    train_datasets, test_datasets = generate_splits_DS_SM(all_subjects, test_subject_id, test_trial_id, eval_name, lite=lite)
-    print(train_datasets)
-    print(test_datasets)
-
-    print("= LOADING DATASETS = SS-DM (Single Subject Different Movie)")
-    train_datasets, test_datasets = generate_splits_SS_DM(all_subjects[test_subject_id], test_trial_id, eval_name, lite=lite)
-    print(train_datasets)
-    print(test_datasets)
-
-    print("= LOADING DATASETS = SS-SM (Single Subject Same Movie)")
-    train_datasets, test_datasets = generate_splits_SS_SM(all_subjects[test_subject_id], test_trial_id, eval_name, lite=lite)
-    print(train_datasets)
-    print(test_datasets)

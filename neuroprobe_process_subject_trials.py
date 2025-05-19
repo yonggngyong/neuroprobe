@@ -3,13 +3,15 @@ import os
 import json
 import pandas as pd
 import numpy as np
-from btbench_config import *
 
-# Data frames column IDs
-start_col, end_col, lbl_col = 'start', 'end', 'pos'
-trig_time_col, trig_idx_col, est_idx_col, est_end_idx_col = 'movie_time', 'index', 'est_idx', 'est_end_idx'
-word_time_col, word_text_col, is_onset_col, is_offset_col = 'word_time', 'text', 'is_onset', 'is_offset'
+from neuroprobe.config import *
+
 def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):
+    # Data frames column IDs
+    start_col, end_col, lbl_col = 'start', 'end', 'pos'
+    trig_time_col, trig_idx_col, est_idx_col, est_end_idx_col = 'movie_time', 'index', 'est_idx', 'est_end_idx'
+    word_time_col, word_text_col, is_onset_col, is_offset_col = 'word_time', 'text', 'is_onset', 'is_offset'
+
     # Path to trigger times csv file
     trigger_times_file = os.path.join(ROOT_DIR, f'subject_timings/sub_{sub_id}_trial{trial_id:03}_timings.csv')
     # Path format to trial metadata json file
@@ -81,6 +83,11 @@ def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):
 
 
 def obtain_nonverbal_df(sub_id, trial_id, words_df, verbose=True, save_to_dir=None):
+    # Data frames column IDs
+    start_col, end_col, lbl_col = 'start', 'end', 'pos'
+    trig_time_col, trig_idx_col, est_idx_col, est_end_idx_col = 'movie_time', 'index', 'est_idx', 'est_end_idx'
+    word_time_col, word_text_col, is_onset_col, is_offset_col = 'word_time', 'text', 'is_onset', 'is_offset'
+
     window_length = int((START_NEURAL_DATA_BEFORE_WORD_ONSET + END_NEURAL_DATA_AFTER_WORD_ONSET) * SAMPLING_RATE)
 
     trigger_times_file = os.path.join(ROOT_DIR, f'subject_timings/sub_{sub_id}_trial{trial_id:03}_timings.csv')
@@ -131,7 +138,7 @@ if __name__ == "__main__":
     parser.add_argument('--trial', type=int, help='Trial ID (optional)') 
     args = parser.parse_args()
 
-    all_subject_trials = [(1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (3, 0), (3, 1), (3, 2), (4, 0), (4, 1), (4, 2), (5, 0), (6, 0), (6, 1), (6, 4), (7, 0), (7, 1), (8, 0), (9, 0), (10, 0), (10, 1)]
+    all_subject_trials = NEUROPROBE_FULL_SUBJECT_TRIALS
 
     # If subject and trial specified, only process that pair
     if args.subject is not None and args.trial is not None:

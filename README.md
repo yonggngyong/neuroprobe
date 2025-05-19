@@ -33,7 +33,7 @@ pip install --upgrade pip
 pip install beautifulsoup4 requests torch torchvision h5py pandas scipy numpy matplotlib seaborn wandb scikit-learn psutil librosa
 ```
 
-2. Specify the path to the braintreebank dataset (or the path to download it to) in the `btbench_config.py` file: 
+2. Specify the path to the braintreebank dataset (or the path to download it to) in the `neuroprobe_config.py` file: 
 ```
 ROOT_DIR = "braintreebank" # Root directory for the braintreebank data
 ```
@@ -44,9 +44,9 @@ python braintreebank_download_extract.py
 
 3. Process the subject trial dataframes:
 ```
-python btbench_process_subject_trials.py
+python neuroprobe_process_subject_trials.py
 ```
-This command will create the files in a directory called `btbench_subject_metadata`.
+This command will create the files in a directory called `neuroprobe_subject_metadata`.
 
 4. Then, you use the file `quickstart.ipynb` to see how to create a dataset and evaluate a linear model.
 

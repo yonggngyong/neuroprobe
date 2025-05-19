@@ -3,11 +3,11 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import pandas as pd
 import os, json
-from btbench_config import *
-from braintreebank_subject import BrainTreebankSubject
 
+from .config import *
+from .braintreebank_subject import BrainTreebankSubject
 
-
+# Defining the names of evaluations and preparing them for downstream processing
 single_float_variables_name_remapping = {
     "pitch": "enhanced_pitch", #"pitch",
     "volume": "enhanced_volume", #"rms",
@@ -27,27 +27,27 @@ classification_variables_name_remapping = {
     "word_head_pos": "bin_head",
     "word_part_speech": "pos"
 }
-
 new_pitch_variables = ['enhanced_pitch', 'enhanced_volume', 'delta_enhanced_pitch', 'delta_enhanced_volume', 'raw_pitch', 'raw_volume', 'delta_raw_pitch', 'delta_raw_volume']
 single_float_variables = list(single_float_variables_name_remapping.values()) + list(single_float_variables_name_remapping.keys()) + new_pitch_variables
 four_way_cardinal_direction_variables = list(four_way_cardinal_directions_name_remapping.values()) + list(four_way_cardinal_directions_name_remapping.keys())
 classification_variables = list(classification_variables_name_remapping.values()) + list(classification_variables_name_remapping.keys())
 all_tasks = single_float_variables + four_way_cardinal_direction_variables + ["onset", "speech"] + ["face_num", "word_gap", "word_index", "speaker"] + classification_variables
 
+
 class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
     def __init__(self, subject, trial_id, dtype, eval_name, output_indices=False, 
                  start_neural_data_before_word_onset=START_NEURAL_DATA_BEFORE_WORD_ONSET * SAMPLING_RATE, end_neural_data_after_word_onset=END_NEURAL_DATA_AFTER_WORD_ONSET * SAMPLING_RATE,
-                 lite=False, random_seed=BTBENCH_GLOBAL_RANDOM_SEED, allow_partial_cache=True, binary_tasks=True):
+                 lite=False, random_seed=NEUROPROBE_GLOBAL_RANDOM_SEED, allow_partial_cache=True, binary_tasks=True):
         """
         Args:
             subject (Subject): the subject to evaluate on
             trial_id (int): the trial to evaluate on
             dtype (torch.dtype): the data type of the returned data
             eval_name (str): the name of the variable to evaluate on
-                Options for eval_name (from the BTBench paper):
+                Options for eval_name (from the Neuroprobe paper):
                     frame_brightness, global_flow, local_flow, global_flow_angle, local_flow_angle, face_num, volume, pitch, delta_volume, 
                     delta_pitch, speech, onset, gpt2_surprisal, word_length, word_gap, word_index, word_head_pos, word_part_speech, speaker
-            lite (bool): if True, the eval is BTBench-Lite (the default), otherwise it is BTBench-Full
+            lite (bool): if True, the eval is Neuroprobe-Lite (the default), otherwise it is Neuroprobe-Full
 
             output_indices (bool): 
                 if True, the dataset will output the indices of the samples in the neural data in a tuple: (index_from, index_to); 
@@ -57,6 +57,7 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             end_neural_data_after_word_onset (int): the number of samples to end the neural data after each word onset
             random_seed (int): seed for random operations within this dataset
         """
+
         # Set up a local random state with the provided seed
         self.rng = np.random.RandomState(random_seed)
         
@@ -75,7 +76,7 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
         self.n_classes = 0
 
         if self.lite:
-            lite_electrodes = BTBENCH_LITE_ELECTRODES[subject.subject_identifier]
+            lite_electrodes = NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier]
             self.electrode_indices_subset = [subject.electrode_labels.index(e) for e in lite_electrodes if e in subject.electrode_labels]
 
         eval_name_remapped = eval_name
@@ -237,12 +238,12 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
         
 
         # If lite, then cache only the part of the neural data that is needed for the dataset. This is to save memory.
-        # the samples will be the first BTBENCH_LITE_MAX_SAMPLES samples of the movie
+        # the samples will be the first NEUROPROBE_LITE_MAX_SAMPLES samples of the movie
         self.cache_window_from = None
         self.cache_window_to = None
         if self.lite:
-            # if self.n_samples < BTBENCH_LITE_MAX_SAMPLES: print(f"WARNING: Subject {self.subject.subject_id}, Trial {self.trial_id}, Eval {self.eval_name}: Not enough samples to create a lite dataset, using all {self.n_samples} samples")
-            max_samples = min(BTBENCH_LITE_MAX_SAMPLES, self.n_samples)
+            # if self.n_samples < NEUROPROBE_LITE_MAX_SAMPLES: print(f"WARNING: Subject {self.subject.subject_id}, Trial {self.trial_id}, Eval {self.eval_name}: Not enough samples to create a lite dataset, using all {self.n_samples} samples")
+            max_samples = min(NEUROPROBE_LITE_MAX_SAMPLES, self.n_samples)
             self.n_samples = max_samples
 
             if allow_partial_cache:
@@ -313,12 +314,3 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             return self._positive_negative_getitem__(idx, force_output_indices=force_output_indices)
         else:
             raise ValueError(f"Invalid eval_name: {self.eval_name}")
-        
-
-if __name__ == "__main__":
-    subject_id, trial_id = 3, 0
-
-    subject = BrainTreebankSubject(subject_id, cache=False)
-    dataset = BrainTreebankSubjectTrialBenchmarkDataset(subject, trial_id, torch.float32, eval_name="enhanced_pitch", lite=True)
-    print("Length of dataset:", len(dataset))
-    print("First sample:", dataset[0], "Shape:", dataset[0][0].shape)
