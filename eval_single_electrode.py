@@ -9,6 +9,8 @@ import torch, numpy as np
 import argparse, json, os, time, psutil
 from scipy import signal
 
+from eval_utils import *
+
 preprocess_options = [
     'none', # no preprocessing, just raw voltage
     'fft_absangle', # magnitude and phase after FFT
@@ -37,6 +39,7 @@ parser.add_argument('--nperseg', type=int, default=256, help='Length of each seg
 parser.add_argument('--only_1second', action='store_true', help='Whether to only evaluate on 1 second after word onset')
 parser.add_argument('--lite', action='store_true', help='Whether to use the lite eval for Neuroprobe (which is the default)')
 parser.add_argument('--electrodes', type=str, default='all', help='Electrode labels to evaluate on. If multiple, separate with commas.')
+parser.add_argument('--classifier_type', type=str, choices=['linear', 'cnn', 'transformer'], default='linear', help='Type of classifier to use for evaluation')
 args = parser.parse_args()
 
 eval_names = args.eval_name.split(',') if ',' in args.eval_name else [args.eval_name]
@@ -51,7 +54,9 @@ lite = bool(args.lite)
 splits_type = args.splits_type
 nperseg = args.nperseg
 preprocess = args.preprocess
+classifier_type = args.classifier_type
 
+model_name = model_name_from_classifier_type(classifier_type)
 
 bins_start_before_word_onset_seconds = 0.5# if not only_1second else 0
 bins_end_after_word_onset_seconds = 1.5# if not only_1second else 1
@@ -76,16 +81,6 @@ bin_ends += [1]
 np.random.seed(seed)
 torch.manual_seed(seed)
 
-max_log_priority = -1 if not verbose else 1
-def log(message, priority=0, indent=0):
-    if priority > max_log_priority: return
-
-    current_time = time.strftime("%H:%M:%S")
-    gpu_memory_reserved = torch.cuda.memory_reserved() / 1024**3 if torch.cuda.is_available() else 0
-    process = psutil.Process()
-    ram_usage = process.memory_info().rss / 1024**3
-    print(f"[{current_time} gpu {gpu_memory_reserved:04.1f}G ram {ram_usage:05.1f}G] {' '*4*indent}{message}")
-
 # use cache=True to load this trial's neural data into RAM, if you have enough memory!
 # It will make the loading process faster.
 subject = BrainTreebankSubject(subject_id, allow_corrupted=False, cache=True, dtype=torch.float32)
@@ -94,75 +89,16 @@ if lite:
     subject.set_electrode_subset(subject.get_lite_electrodes())
 all_electrode_labels = subject.electrode_labels if electrodes[0] == 'all' else electrodes
 
-def compute_stft(data, fs=2048, preprocess="fft_abs"):
-    """Compute spectrogram with both power and phase information for a single trial of data."""
-    noverlap = 0 # 0% overlap
-    
-    # Use STFT to get complex-valued coefficients
-    f, t, Zxx = signal.stft(
-        data,
-        fs=fs, 
-        nperseg=nperseg,
-        noverlap=noverlap,
-        window='boxcar'
-    )
-
-    if preprocess == "fft_absangle":
-        # Split complex values into magnitude and phase
-        magnitude = np.abs(Zxx)
-        phase = np.angle(Zxx)
-        # Stack magnitude and phase along a new axis
-        return np.stack([magnitude, phase], axis=-2)
-    elif preprocess == "fft_realimag":
-        real = np.real(Zxx)
-        imag = np.imag(Zxx)
-        return np.stack([real, imag], axis=-2)
-    else:   
-        magnitude = np.abs(Zxx)
-        return magnitude
-
-def downsample(data, fs=2048, downsample_rate=200):
-    return signal.resample_poly(data, up=fs, down=downsample_rate, axis=-1)
-
-def remove_line_noise(data, fs=2048, line_freq=60):
-    """Remove line noise (60 Hz and harmonics) from neural data."""
-    filtered_data = data.copy()
-    bandwidth = 5.0
-    Q = line_freq / bandwidth
-    
-    for harmonic in range(1, 6):
-        harmonic_freq = line_freq * harmonic
-        if harmonic_freq > fs/2:
-            break
-        b, a = signal.iirnotch(harmonic_freq, Q, fs)
-        if filtered_data.ndim == 2:
-            filtered_data = signal.filtfilt(b, a, filtered_data, axis=1)
-        elif filtered_data.ndim == 3:
-            for i in range(filtered_data.shape[0]):
-                filtered_data[i] = signal.filtfilt(b, a, filtered_data[i], axis=1)
-    
-    return filtered_data
-
-def preprocess_data(data):
-    for preprocess_option in preprocess.split('+'):
-        if preprocess_option in ['fft_absangle', 'fft_realimag', 'fft_abs']:
-            data = compute_stft(data, preprocess=preprocess_option)
-        elif preprocess_option == 'remove_line_noise':
-            data = remove_line_noise(data)
-        elif preprocess_option == 'downsample_200':
-            data = downsample(data, downsample_rate=200)
-    return data
-
 for eval_name in eval_names:
-    save_dir = f"{save_dir}/linear_{preprocess if preprocess != 'none' else 'voltage'}{'_nperseg' + str(nperseg) if nperseg != 256 else ''}_single_electrode"
+    save_dir = f"{save_dir}/{classifier_type}_{preprocess if preprocess != 'none' else 'voltage'}{'_nperseg' + str(nperseg) if nperseg != 256 else ''}_single_electrode"
     os.makedirs(save_dir, exist_ok=True)
     filename = f"electrode_{subject.subject_identifier}_{trial_id}_{eval_name}.json"
     
     # Load existing results if file exists
     results = {
-        "model_name": "Logistic Regression",
-        "author": None,
-        "description": "Simple linear regression.",
+        "model_name": model_name,
+        "author": "Andrii Zahorodnii",
+        "description": f"Simple {model_name}.",
         "organization": "MIT",
         "organization_url": "https://mit.edu",
         "timestamp": time.time(),
@@ -229,12 +165,14 @@ for eval_name in eval_names:
                 test_dataset = test_datasets[fold_idx]
 
                 # Convert PyTorch dataset to numpy arrays for scikit-learn
-                X_train = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy()) for item in train_dataset])
+                X_train = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), preprocess) for item in train_dataset])
                 y_train = np.array([item[1] for item in train_dataset])
-                X_test = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy()) for item in test_dataset])
+                X_test = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), preprocess) for item in test_dataset])
                 y_test = np.array([item[1] for item in test_dataset])
 
                 # Flatten the data after preprocessing
+                original_X_train_shape = X_train.shape
+                original_X_test_shape = X_test.shape
                 X_train = X_train.reshape(X_train.shape[0], -1)
                 X_test = X_test.reshape(X_test.shape[0], -1)
 
@@ -244,7 +182,18 @@ for eval_name in eval_names:
                 X_test = scaler.transform(X_test)
 
                 # Train logistic regression
-                clf = LogisticRegression(random_state=seed, max_iter=10000, tol=1e-3)
+                if classifier_type == 'linear':
+                    clf = LogisticRegression(random_state=seed, max_iter=10000, tol=1e-3)
+                elif classifier_type == 'cnn':
+                    X_train = X_train.reshape(original_X_train_shape)
+                    X_test = X_test.reshape(original_X_test_shape)
+                    clf = CNNClassifier(random_state=seed)
+                elif classifier_type == 'transformer':
+                    X_train = X_train.reshape(original_X_train_shape)
+                    X_test = X_test.reshape(original_X_test_shape)
+                    clf = TransformerClassifier(random_state=seed)
+                else:
+                    raise ValueError(f"Invalid classifier type: {classifier_type}")
                 clf.fit(X_train, y_train)
 
                 # Evaluate model
