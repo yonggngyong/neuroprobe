@@ -546,10 +546,12 @@ def combine_regions(X_train, X_test, regions_train, regions_test):
     unique_regions_test = np.unique(regions_test)
     common_regions = np.intersect1d(unique_regions_train, unique_regions_test)
     
+    d_model_dimension_unsqueezed = False
     if X_train.ndim == 3:
         # Add a dummy dimension to X_train and X_test for d_model=1
         X_train = X_train[:, :, :, np.newaxis]
         X_test = X_test[:, :, :, np.newaxis]
+        d_model_dimension_unsqueezed = True
 
     n_samples_train, _, n_timebins, d_model = X_train.shape
     n_samples_test = X_test.shape[0]
@@ -568,5 +570,9 @@ def combine_regions(X_train, X_test, regions_train, regions_test):
         # Average across channels with the same region
         X_train_regions[:, i, :, :] = X_train[:, train_mask, :, :].mean(axis=1)
         X_test_regions[:, i, :, :] = X_test[:, test_mask, :, :].mean(axis=1)
+
+    if d_model_dimension_unsqueezed: # remove the dummy dimension
+        X_train_regions = X_train_regions[:, :, :, 0]
+        X_test_regions = X_test_regions[:, :, :, 0]
     
     return X_train_regions, X_test_regions, common_regions
