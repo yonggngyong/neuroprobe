@@ -37,7 +37,7 @@ all_tasks = single_float_variables + four_way_cardinal_direction_variables + ["o
 class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
     def __init__(self, subject, trial_id, dtype, eval_name, output_indices=False, 
                  start_neural_data_before_word_onset=START_NEURAL_DATA_BEFORE_WORD_ONSET * SAMPLING_RATE, end_neural_data_after_word_onset=END_NEURAL_DATA_AFTER_WORD_ONSET * SAMPLING_RATE,
-                 lite=False, random_seed=NEUROPROBE_GLOBAL_RANDOM_SEED, allow_partial_cache=True, binary_tasks=True):
+                 lite=True, random_seed=NEUROPROBE_GLOBAL_RANDOM_SEED, allow_partial_cache=True, output_dict=False):
         """
         Args:
             subject (Subject): the subject to evaluate on
@@ -52,6 +52,17 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             output_indices (bool): 
                 if True, the dataset will output the indices of the samples in the neural data in a tuple: (index_from, index_to); 
                 if False, the dataset will output the neural data directly
+
+            output_dict (bool): 
+                if True, the dataset will output a dictionary with the following keys:
+                    "data": the neural data -- either directly or as a tuple (index_from, index_to)
+                    "label": the label
+                    "electrode_labels": the labels of the electrodes
+                If False, the dataset will output a tuple (input, label) or ((index_from, index_to), label) directly
+
+
+            allow_partial_cache (bool): if True, the dataset will allow partial caching of the neural data 
+                (if only part of the recording is needed for the dataset); this is useful for large datasets
             
             start_neural_data_before_word_onset (int): the number of samples to start the neural data before each word onset
             end_neural_data_after_word_onset (int): the number of samples to end the neural data after each word onset
@@ -72,8 +83,9 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
         self.start_neural_data_before_word_onset = start_neural_data_before_word_onset
         self.end_neural_data_after_word_onset = end_neural_data_after_word_onset
         self.lite = lite
-        self.binary_tasks = binary_tasks
+        self.binary_tasks = True # Neuroprobe always uses binary tasks
         self.n_classes = 0
+        self.output_dict = output_dict
 
         if self.lite:
             lite_electrodes = NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier]
@@ -91,6 +103,14 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
         self.nonverbal_df = pd.read_csv(nonverbal_df_path)
 
         self.movie_name = BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"{self.subject.subject_identifier}_{self.trial_id}"]
+        
+        # Add the original features from braintreebank to the all_words_df
+        transcript_file_format = os.path.join(ROOT_DIR, f'transcripts/{self.movie_name}/features.csv')
+        original_features_df = pd.read_csv(transcript_file_format.format(self.movie_name)).set_index('Unnamed: 0')
+        # Add new columns from words_df using original_index mapping
+        new_columns = [col for col in original_features_df.columns if col not in self.all_words_df.columns]
+        for col in new_columns:
+            self.all_words_df[col] = self.all_words_df['original_index'].map(original_features_df[col])
 
         rebalance_classes = False # setting this flag as false by default; it is only relevant for classification tasks
         if eval_name == "word_gap": # create the word gap column
@@ -104,42 +124,27 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             self.all_words_df['word_gap'] = word_gaps
         
         if eval_name in single_float_variables:
+            # Grab the new pitch volume features if they exist
             if self.eval_name_remapped in new_pitch_variables:
                 pitch_volume_features_path = os.path.join(PITCH_VOLUME_FEATURES_DIR, f"{self.movie_name}_pitch_volume_features.json")
                 with open(pitch_volume_features_path, 'r') as f:
                     raw_pitch_volume_features = json.load(f)
 
-                TARGET_DP_FOR_KEYS = 8  # Standard number of decimal places
-                
+                TARGET_DP_FOR_KEYS = 5  # Standard number of decimal places
                 normalized_pvf = {}
                 for k_str, v_val in raw_pitch_volume_features.items():
-                    try:
-                        k_float = float(k_str)
-                        normalized_key = f"{k_float:.{TARGET_DP_FOR_KEYS}f}"
-                        
-                        if normalized_key in normalized_pvf:
-                            pass
-                        else:
-                            normalized_pvf[normalized_key] = v_val
-                    except ValueError:
-                        # If a key is not a float string, keep it as is.
-                        normalized_pvf[k_str] = v_val
-                pitch_volume_features = normalized_pvf 
+                    k_float = float(k_str)
+                    normalized_key = f"{k_float:.{TARGET_DP_FOR_KEYS}f}"
+                    normalized_pvf[normalized_key] = v_val
+                pitch_volume_features = normalized_pvf
 
                 start_times = self.all_words_df['start'].to_list()
-                
+
                 all_labels = []
                 for start_time_val in start_times:
                     lookup_key = f"{start_time_val:.{TARGET_DP_FOR_KEYS}f}"
-                    try:
-                        label = pitch_volume_features[lookup_key][self.eval_name_remapped]
-                        all_labels.append(label)
-                    except KeyError:
-          
-                        print(f"  Persistent KeyError: Could not find normalized key '{lookup_key}' (from start_time {start_time_val}) "
-                              f"for task '{self.eval_name_remapped}' in movie '{self.movie_name}'. "
-                              f"Skipping this start_time. Check data integrity if this happens often.")
-                        raise 
+                    label = pitch_volume_features[lookup_key][self.eval_name_remapped]
+                    all_labels.append(label)
 
                 all_labels = np.array(all_labels)
             else:
@@ -307,10 +312,15 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             raise IndexError(f"Index {idx} out of bounds for dataset of size {self.n_samples}")
         
         if self.eval_name in single_float_variables or self.eval_name == "word_gap":
-            return self._simple_float_variable__getitem__(idx, force_output_indices=force_output_indices)
+            input, label = self._simple_float_variable__getitem__(idx, force_output_indices=force_output_indices)
         elif self.eval_name in four_way_cardinal_direction_variables or self.eval_name in ["face_num", "word_index", "word_head_pos", "word_part_speech", "speaker"]:
-            return self._classification__getitem__(idx, force_output_indices=force_output_indices)
+            input, label = self._classification__getitem__(idx, force_output_indices=force_output_indices)
         elif self.eval_name in ["onset", "speech"]:
-            return self._positive_negative_getitem__(idx, force_output_indices=force_output_indices)
+            input, label = self._positive_negative_getitem__(idx, force_output_indices=force_output_indices)
         else:
             raise ValueError(f"Invalid eval_name: {self.eval_name}")
+
+        if self.output_dict:
+            return {"data": input, "label": label, "electrode_labels": self.subject.electrode_labels}
+        else:
+            return input, label

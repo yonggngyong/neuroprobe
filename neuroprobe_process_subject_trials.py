@@ -8,9 +8,8 @@ from neuroprobe.config import *
 
 def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):
     # Data frames column IDs
-    start_col, end_col, lbl_col = 'start', 'end', 'pos'
+    start_col, end_col = 'start', 'end'
     trig_time_col, trig_idx_col, est_idx_col, est_end_idx_col = 'movie_time', 'index', 'est_idx', 'est_end_idx'
-    word_time_col, word_text_col, is_onset_col, is_offset_col = 'word_time', 'text', 'is_onset', 'is_offset'
 
     # Path to trigger times csv file
     trigger_times_file = os.path.join(ROOT_DIR, f'subject_timings/sub_{sub_id}_trial{trial_id:03}_timings.csv')
@@ -29,17 +28,10 @@ def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):
     trigs_df = pd.read_csv(trigger_times_file)
     words_df = pd.read_csv(transcript_file_format.format(movie_id)).set_index('Unnamed: 0')
     words_df = words_df.drop(['word_diff', 'onset_diff'], axis=1) # remove those columns because they are unnecessary and cause excessive filtering with NaN values
+    
+    # Store original index before any transformations
+    words_df['original_index'] = words_df.index.copy()    
     words_df = words_df.dropna().reset_index(drop=True)
-
-    # Add enhanced pitch columns if they exist
-    enhanced_pitch_words_df_file_format = os.path.join(f'enhanced_pitch_words_df/{movie_id}.csv')
-    if os.path.exists(enhanced_pitch_words_df_file_format):
-        enhanced_pitch_words_df = pd.read_csv(enhanced_pitch_words_df_file_format)
-        assert len(enhanced_pitch_words_df) == len(words_df), f"Enhanced pitch words df length {len(enhanced_pitch_words_df)} does not match words df length {len(words_df)}"
-        new_cols = [col for col in enhanced_pitch_words_df.columns if col not in words_df.columns and col != 'text']
-        print(f"Adding {len(new_cols)} new columns from the enhanced pitch df to the words df: {new_cols}")
-        for col in new_cols:
-            words_df[col] = enhanced_pitch_words_df[col].values
 
     # Vectorized sample index estimation
     def add_estimated_sample_index_vectorized(w_df, t_df):
@@ -72,6 +64,10 @@ def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):
     valid_words = (words_df[est_idx_col] >= int(START_NEURAL_DATA_BEFORE_WORD_ONSET * SAMPLING_RATE)) & \
                  (words_df[est_end_idx_col] <= int(total_samples - END_NEURAL_DATA_AFTER_WORD_ONSET * SAMPLING_RATE))
     words_df = words_df[valid_words].reset_index(drop=True)
+
+    # Keep only the columns that were added in the code and the original index
+    columns_to_keep = ['original_index', est_idx_col, est_end_idx_col, start_col, end_col]
+    words_df = words_df[columns_to_keep]
 
     if verbose: print(f"Kept {len(words_df)} words after removing invalid windows")
     # Save the processed words dataframe

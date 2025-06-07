@@ -138,7 +138,7 @@ def preprocess_data(data, preprocess):
 
 
 class TransformerClassifier:
-    def __init__(self, random_state=42, max_iter=100, batch_size=128, learning_rate=0.001, val_size=0.2, tol=1e-4, patience=10,
+    def __init__(self, random_state=42, max_iter=100, batch_size=64, learning_rate=0.001, val_size=0.2, tol=1e-4, patience=10,
                  d_model=64, nhead=8, dim_feedforward=256, dropout=0.1, num_layers=3):
         self.random_state = random_state
         self.max_iter = max_iter
@@ -159,8 +159,13 @@ class TransformerClassifier:
 
     def _create_model(self, input_shape, n_classes):
         class Transformer(torch.nn.Module):
-            def __init__(self, input_shape, n_classes):
+            def __init__(self, input_shape, n_classes, d_model=64, nhead=8, dim_feedforward=256, dropout=0.1, num_layers=3):
                 super().__init__()
+                self.d_model = d_model
+                self.nhead = nhead
+                self.dim_feedforward = dim_feedforward
+                self.dropout = dropout
+                self.num_layers = num_layers
                 # Assuming input shape is (channels, time) or (channels, freq, time)
                 if len(input_shape) == 2:
                     self.input_proj = torch.nn.Linear(input_shape[0], self.d_model)  # Project channels to embedding dim
@@ -225,7 +230,7 @@ class TransformerClassifier:
             def forward(self, x):
                 return x + self.pe[:, :x.size(1)]
         
-        return Transformer(input_shape, n_classes)
+        return Transformer(input_shape, n_classes, d_model=self.d_model, nhead=self.nhead, dim_feedforward=self.dim_feedforward, dropout=self.dropout, num_layers=self.num_layers)
     
     def fit(self, X, y):
         # Convert to torch tensors
@@ -236,11 +241,10 @@ class TransformerClassifier:
         self.classes_ = np.unique(y)
         n_classes = len(self.classes_)
         
-        # Create train/val split
-        indices = np.random.permutation(len(X))
+        # Create train/val split - take last portion for validation
         val_size = int(self.val_size * len(X))
-        train_indices = indices[val_size:]
-        val_indices = indices[:val_size]
+        train_indices = np.arange(len(X) - val_size)
+        val_indices = np.arange(len(X) - val_size, len(X))
         
         X_train, y_train = X[train_indices], y[train_indices]
         X_val, y_val = X[val_indices], y[val_indices]
@@ -329,11 +333,16 @@ class TransformerClassifier:
     
     def predict_proba(self, X):
         self.model.eval()
+        all_probs = []
         with torch.no_grad():
-            X = torch.FloatTensor(X).to(self.device)
-            outputs = self.model(X)
-            probs = torch.nn.functional.softmax(outputs, dim=1)
-            return probs.cpu().numpy()
+            X = torch.FloatTensor(X)
+            # Process in batches
+            for i in range(0, len(X), self.batch_size):
+                batch_X = X[i:i+self.batch_size].to(self.device)
+                outputs = self.model(batch_X)
+                probs = torch.nn.functional.softmax(outputs, dim=1)
+                all_probs.append(probs.cpu().numpy())
+        return np.concatenate(all_probs, axis=0)
     
     def predict(self, X):
         probs = self.predict_proba(X)
@@ -416,11 +425,10 @@ class CNNClassifier:
         self.classes_ = np.unique(y)
         n_classes = len(self.classes_)
         
-        # Create train/val split
-        indices = np.random.permutation(len(X))
+        # Create train/val split - take last portion for validation
         val_size = int(self.val_size * len(X))
-        train_indices = indices[val_size:]
-        val_indices = indices[:val_size]
+        train_indices = np.arange(len(X) - val_size)
+        val_indices = np.arange(len(X) - val_size, len(X))
         
         X_train, y_train = X[train_indices], y[train_indices]
         X_val, y_val = X[val_indices], y[val_indices]
@@ -509,11 +517,16 @@ class CNNClassifier:
     
     def predict_proba(self, X):
         self.model.eval()
+        all_probs = []
         with torch.no_grad():
-            X = torch.FloatTensor(X).to(self.device)
-            outputs = self.model(X)
-            probs = torch.nn.functional.softmax(outputs, dim=1)
-            return probs.cpu().numpy()
+            X = torch.FloatTensor(X)
+            # Process in batches
+            for i in range(0, len(X), self.batch_size):
+                batch_X = X[i:i+self.batch_size].to(self.device)
+                outputs = self.model(batch_X)
+                probs = torch.nn.functional.softmax(outputs, dim=1)
+                all_probs.append(probs.cpu().numpy())
+        return np.concatenate(all_probs, axis=0)
     
     def predict(self, X):
         probs = self.predict_proba(X)

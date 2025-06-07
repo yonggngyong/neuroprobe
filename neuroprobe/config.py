@@ -5,9 +5,9 @@
 # It is recommended that all the paths are absolute!
 # Feel free to change this setting to your own directory.
 ROOT_DIR = "/om2/user/zaho/braintreebank/braintreebank" # Root directory for the braintreebank data. Recommended to use the absolute path.
-SAVE_SUBJECT_TRIAL_DF_DIR = "/om2/user/zaho/neuroprobe/neuroprobe/neuroprobe_subject_metadata"
-SAVE_SUBJECT_TRIAL_DF_DIR = "/om2/user/zaho/btbench/btbench_subject_metadata"
-PITCH_VOLUME_FEATURES_DIR = "/om2/user/zaho/neuroprobe/neuroprobe/neuroprobe_pitch_volume_features" # This comes together with the neuroprobe package
+SAVE_SUBJECT_TRIAL_DF_DIR = "/om2/user/zaho/neuroprobe/neuroprobe/braintreebank_features_time_alignment"
+#SAVE_SUBJECT_TRIAL_DF_DIR = "/om2/user/zaho/neuroprobe/btbench_subject_metadata"
+PITCH_VOLUME_FEATURES_DIR = "/om2/user/zaho/neuroprobe/neuroprobe/pitch_volume_features" # This comes together with the neuroprobe package
 
 
 # Disable file locking for HDF5 files. This is helpful for parallel processing.
@@ -16,13 +16,13 @@ import os; os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
 ##########################
 # 2. Neuroprobe settings
+# Do not change the settings below if you want the neuroprobe results to be compatible with others' evaluations!
 ##########################
 
 SAMPLING_RATE = 2048 # Sampling rate for the BrainTreebank data (do not change this)
 # Define a global random seed for reproducibility
 NEUROPROBE_GLOBAL_RANDOM_SEED = 42  
 
-# Do not change the settings below if you want the neuroprobe results to be compatible with others' evaluations!
 # No need to change the settings below because you can change these values dynamically when defining the splits using the functions from neuroprobe_train_test_splits.py and the dataset from neuroprobe_datasets.py
 START_NEURAL_DATA_BEFORE_WORD_ONSET = 0.5 # in seconds. NOTE: for the 1-second evaluation on the leaderboard, this is overridden to 0.
 END_NEURAL_DATA_AFTER_WORD_ONSET = 2 # in seconds. NOTE: for the 1-second evaluation on the leaderboard, this is overridden to 1.

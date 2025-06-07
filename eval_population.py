@@ -85,7 +85,7 @@ bin_ends += [1]
 # use cache=True to load this trial's neural data into RAM, if you have enough memory!
 # It will make the loading process faster.
 subject = BrainTreebankSubject(subject_id, allow_corrupted=False, cache=True, dtype=torch.float32)
-all_electrode_labels = subject.electrode_labels
+all_electrode_labels = neuroprobe_config.NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier] if lite else subject.electrode_labels
 
 for eval_name in eval_names:
     file_save_dir = f"{save_dir}/{classifier_type}_{preprocess if preprocess != 'none' else 'voltage'}{'_nperseg' + str(nperseg) if nperseg != 256 else ''}"
@@ -200,6 +200,9 @@ for eval_name in eval_names:
                 X_test = X_test.reshape(original_X_test_shape)
                 clf = TransformerClassifier(random_state=seed)
             clf.fit(X_train, y_train)
+
+            torch.cuda.empty_cache()
+            gc.collect()
 
             # Evaluate model
             train_accuracy = clf.score(X_train, y_train)

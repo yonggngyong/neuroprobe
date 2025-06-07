@@ -42,17 +42,11 @@ Then, download and extract the braintreebank dataset (this step can be skipped i
 python braintreebank_download_extract.py
 ```
 
-3. Process the subject trial dataframes:
-```
-python neuroprobe_process_subject_trials.py
-```
-This command will create the files in a directory called `neuroprobe_subject_metadata`.
+3. Then, you use the file `quickstart.ipynb` to see how to create a dataset and evaluate a linear model.
 
-4. Then, you use the file `quickstart.ipynb` to see how to create a dataset and evaluate a linear model.
-
-5. To evaluate the linear regression model on all electrodes and time bins separately, run:
+4. To evaluate the linear regression model on all electrodes and time bins separately, run (for example):
 ```
-python single_electrode.py --subject SUBJECT_ID --trial TRIAL_ID --verbose
+python single_electrode.py --subject SUBJECT_ID --trial TRIAL_ID --verbose --lite --eval_name onset --splits_type SS_DM
 ```
 This command will create a JSON file in the `eval_results` directory with the results, according to the schema in `leaderboard_schema.json`. You can change the `save_dir` argument to save the results to a different directory: `--save_dir SAVE_DIR`.
 
