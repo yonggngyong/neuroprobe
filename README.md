@@ -1,7 +1,7 @@
 # Neuroprobe: Evaluating Intracranial Brain Responses to Naturalistic Stimuli
 Andrii Zahorodnii¹²*, Bennett Stankovits¹*, Christopher Wang¹*, Charikleia Moraitaki¹, Geeling Chau³, Ila R Fiete¹², Boris Katz¹, Andrei Barbu¹
 
-![Neuroprobe Logo](neuroprobe_animation.jpg)
+![Neuroprobe Logo](neuroprobe_animation.gif)
 
 ¹MIT CSAIL, CBMM  |  ²MIT McGovern Institute  |  ³Caltech  |  *Equal contribution
 
