@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://neuroprobe.dev">
-    <img src="neuroprobe_animation.gif" alt="Neuroprobe Logo" style="height: 10em" />
+    <img src="assets/neuroprobe_animation.gif" alt="Neuroprobe Logo" style="height: 10em" />
   </a>
 </p>
 
