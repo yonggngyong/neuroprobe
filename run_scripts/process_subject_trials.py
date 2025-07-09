@@ -4,6 +4,11 @@ import json
 import pandas as pd
 import numpy as np
 
+# Add the parent directory to the path so that we can import the neuroprobe package
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from neuroprobe.config import *
 
 def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):

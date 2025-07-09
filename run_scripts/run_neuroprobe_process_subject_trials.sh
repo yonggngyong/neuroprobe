@@ -18,4 +18,4 @@ declare -a trials=(0 1 2 0 1 2 3 4 5 6 0 1 2 0 1 2 0 0 1 4 0 1 0 0 0 1)
 
 id=$((SLURM_ARRAY_TASK_ID-1))
 
-python -u neuroprobe_process_subject_trials.py --subject ${subjects[$id]} --trial ${trials[$id]}
+python -u run_scripts/process_subject_trials.py --subject ${subjects[$id]} --trial ${trials[$id]}
