@@ -9,7 +9,7 @@ from .config import *
 
 
 def generate_splits_DS_DM(all_subjects, test_subject_id, test_trial_id, eval_name, dtype=torch.float32,
-                          lite=True, allow_partial_cache=True,
+                          lite=True, nano=False, allow_partial_cache=True,
                           
                           # Dataset parameters
                           output_indices=False, 
