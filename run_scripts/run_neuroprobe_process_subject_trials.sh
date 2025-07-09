@@ -6,8 +6,8 @@
 #SBATCH --exclude=dgx001,dgx002
 #SBATCH -t 1:00:00         # total run time limit (HH:MM:SS) (increased to 24 hours)
 #SBATCH --array=1-26  # 285 if doing mini btbench
-#SBATCH --output logs/%A_%a.out # STDOUT
-#SBATCH --error logs/%A_%a.err # STDERR
+#SBATCH --output data/logs/%A_%a.out # STDOUT
+#SBATCH --error data/logs/%A_%a.err # STDERR
 #SBATCH -p use-everything
 
 export PYTHONUNBUFFERED=1

@@ -3,13 +3,13 @@
 #SBATCH --ntasks=1             # 8 tasks total
 #SBATCH --cpus-per-task=2    # Request 8 CPU cores per GPU
 #SBATCH --mem=64G
-#SBATCH --gres=gpu:1
+#####SBATCH --gres=gpu:1
 #SBATCH -t 12:00:00         # total run time limit (HH:MM:SS) (increased to 24 hours)
 #####SBATCH --constraint=24GB
 #SBATCH --exclude=dgx001,dgx002
-#SBATCH --array=1-1368  # 285 if doing mini btbench
-#SBATCH --output logs/%A_%a.out # STDOUT
-#SBATCH --error logs/%A_%a.err # STDERR
+#SBATCH --array=1-684  # 285 if doing mini btbench
+#SBATCH --output data/logs/%A_%a.out # STDOUT
+#SBATCH --error data/logs/%A_%a.err # STDERR
 #SBATCH -p use-everything
 
 nvidia-smi
@@ -60,9 +60,9 @@ declare -a splits_type=(
 )
 
 declare -a classifier_type=(
-    #"linear"
-    "cnn"
-    "transformer"
+    "linear"
+    #"cnn"
+    #"transformer"
 )
 
 # Calculate indices for this task
@@ -79,7 +79,7 @@ TRIAL=${trials[$PAIR_IDX]}
 PREPROCESS=${preprocess[$PREPROCESS_IDX]}
 SPLITS_TYPE=${splits_type[$SPLITS_TYPE_IDX]}
 CLASSIFIER_TYPE=${classifier_type[$CLASSIFIER_TYPE_IDX]}
-save_dir="eval_results_lite_${SPLITS_TYPE}"
+save_dir="data/eval_results_lite_${SPLITS_TYPE}"
 
 echo "Running eval for eval $EVAL_NAME, subject $SUBJECT, trial $TRIAL, preprocess $PREPROCESS, classifier $CLASSIFIER_TYPE --save_dir $save_dir --splits_type $SPLITS_TYPE --only_1second"
 # Add the -u flag to Python to force unbuffered output
