@@ -207,7 +207,7 @@ def generate_splits_SS_SM(test_subject, test_trial_id, eval_name, dtype=torch.fl
                                                         output_indices=output_indices, start_neural_data_before_word_onset=start_neural_data_before_word_onset, end_neural_data_after_word_onset=end_neural_data_after_word_onset,
                                                         lite=lite, nano=nano, allow_partial_cache=allow_partial_cache)
     
-    k_folds = 5 if not nano else 2
+    k_folds = NEUROPROBE_LITE_N_FOLDS if not nano else NEUROPROBE_NANO_N_FOLDS
     kf = KFold(n_splits=k_folds, shuffle=False)  # shuffle=False is important to avoid correlated train/test splits!
     
     for fold, (train_idx, test_idx) in enumerate(kf.split(dataset)):
