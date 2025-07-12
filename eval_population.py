@@ -14,9 +14,9 @@ from eval_utils import *
 
 preprocess_options = [
     'none', # no preprocessing, just raw voltage
-    'fft_absangle', # magnitude and phase after FFT
-    'fft_realimag', # real and imaginary parts after FFT
-    'fft_abs', # just magnitude after FFT ("spectrogram")
+    'stft_absangle', # magnitude and phase after FFT
+    'stft_realimag', # real and imaginary parts after FFT
+    'stft_abs', # just magnitude after FFT ("spectrogram")
 
     'remove_line_noise', # remove line noise from the raw voltage
     'downsample_200', # downsample to 200 Hz
@@ -29,31 +29,50 @@ splits_options = [
 ]
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--eval_name', type=str, default='onset', help='Evaluation name(s) (e.g. onset, gpt2_surprisal). If multiple, separate with commas.')
-parser.add_argument('--subject', type=int, required=True, help='Subject ID')
-parser.add_argument('--trial', type=int, required=True, help='Trial ID')
+parser.add_argument('--eval_name', type=str, default='onset', choices=neuroprobe_config.NEUROPROBE_TASKS, help='Evaluation name(s) (e.g. onset, gpt2_surprisal). If multiple, separate with commas.')
+parser.add_argument('--split_type', type=str, choices=splits_options, default='SS_SM', help=f'Type of splits to use ({", ".join(splits_options)})')
+parser.add_argument('--subject_id', type=int, required=True, help='Subject ID')
+parser.add_argument('--trial_id', type=int, required=True, help='Trial ID')
+
 parser.add_argument('--verbose', action='store_true', help='Whether to print progress')
 parser.add_argument('--save_dir', type=str, default='eval_results', help='Directory to save results')
-parser.add_argument('--preprocess', type=str, choices=preprocess_options, default='none', help=f'Preprocessing to apply to neural data ({", ".join(preprocess_options)})')
-parser.add_argument('--splits_type', type=str, choices=splits_options, default='SS_SM', help=f'Type of splits to use ({", ".join(splits_options)})')
 parser.add_argument('--seed', type=int, default=42, help='Random seed')
-parser.add_argument('--nperseg', type=int, default=256, help='Length of each segment for FFT calculation (only used if preprocess is fft_absangle, fft_realimag, or fft_abs)')
+
 parser.add_argument('--only_1second', action='store_true', help='Whether to only evaluate on 1 second after word onset')
-parser.add_argument('--lite', action='store_true', help='Whether to use the lite eval for Neuroprobe (which is the default)')
+parser.add_argument('--full', action='store_true', help='Whether to use the full eval for Neuroprobe (NOTE: Lite is the default!)')
+parser.add_argument('--nano', action='store_true', help='Whether to use Neuroprobe Nano for faster evaluation')
+
+parser.add_argument('--preprocess.type', type=str, choices=preprocess_options, default='none', help=f'Preprocessing to apply to neural data ({", ".join(preprocess_options)})')
+parser.add_argument('--preprocess.stft.nperseg', type=int, default=512, help='Length of each segment for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.875, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+
 parser.add_argument('--classifier_type', type=str, choices=['linear', 'cnn', 'transformer'], default='linear', help='Type of classifier to use for evaluation')
 args = parser.parse_args()
 
-eval_names = args.eval_name.split(',') if ',' in args.eval_name else [args.eval_name]
-subject_id = args.subject
-trial_id = args.trial 
+eval_names = args.eval_name.split(',')
+splits_type = args.split_type
+subject_id = args.subject_id
+trial_id = args.trial_id
+
 verbose = bool(args.verbose)
 save_dir = args.save_dir
-preprocess = args.preprocess
-splits_type = args.splits_type
 seed = args.seed
-nperseg = args.nperseg
+
 only_1second = bool(args.only_1second)
-lite = bool(args.lite)
+lite = not bool(args.full)
+nano = bool(args.nano)
+assert (not nano) or (splits_type != "SS_DM"), "Nano only works with SS_SM or DS_DM splits; does not work with SS_DM."
+assert (not nano) or lite, "--nano and --full cannot be used together. Neuroprobe Full and Neuroprobe Nano are different evaluations."
+
+preprocess_type = getattr(args, 'preprocess.type')
+preprocess_parameters = {
+    "type": preprocess_type,
+    "stft": {
+        "nperseg": getattr(args, 'preprocess.stft.nperseg'),
+        "poverlap": getattr(args, 'preprocess.stft.poverlap')
+    }
+}
+
 classifier_type = args.classifier_type
 
 model_name = model_name_from_classifier_type(classifier_type)
@@ -84,27 +103,32 @@ bin_ends += [1]
 
 # use cache=True to load this trial's neural data into RAM, if you have enough memory!
 # It will make the loading process faster.
+start_time = time.time()
 subject = BrainTreebankSubject(subject_id, allow_corrupted=False, cache=True, dtype=torch.float32)
 all_electrode_labels = neuroprobe_config.NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier] if lite else subject.electrode_labels
+subject.set_electrode_subset(all_electrode_labels)  # Use all electrodes
+subject.load_neural_data(trial_id)
+subject_load_time = time.time() - start_time
+if verbose:
+    log(f"Subject loaded in {subject_load_time:.2f} seconds", priority=0)
 
 for eval_name in eval_names:
-    file_save_dir = f"{save_dir}/{classifier_type}_{preprocess if preprocess != 'none' else 'voltage'}{'_nperseg' + str(nperseg) if nperseg != 256 else ''}"
+    start_time = time.time()
+
+    preprocess_suffix = f"{preprocess_type}" if preprocess_type != 'none' else 'voltage'
+    preprocess_suffix += f"_nperseg{preprocess_parameters['stft']['nperseg']}" if preprocess_type.startswith('stft') else ''
+    preprocess_suffix += f"_poverlap{preprocess_parameters['stft']['poverlap']}" if preprocess_type.startswith('stft') else ''
+    file_save_dir = f"{save_dir}/{classifier_type}_{preprocess_suffix}"
     os.makedirs(file_save_dir, exist_ok=True) # Create save directory if it doesn't exist
+
     file_save_path = f"{file_save_dir}/population_{subject.subject_identifier}_{trial_id}_{eval_name}.json"
     if os.path.exists(file_save_path):
         log(f"Skipping {file_save_path} because it already exists", priority=0)
         continue
 
-
     results_population = {
         "time_bins": [],
     }
-
-    # Load all electrodes at once
-    # subject.clear_neural_data_cache()
-    subject.set_electrode_subset(all_electrode_labels)  # Use all electrodes
-    if verbose:
-        log("Subject loaded", priority=0)
 
     # train_datasets and test_datasets are arrays of length k_folds, each element is a BrainTreebankSubjectTrialBenchmarkDataset for the train/test split
     if splits_type == "SS_SM":
@@ -112,7 +136,7 @@ for eval_name in eval_names:
                                                                                         output_indices=False, 
                                                                                         start_neural_data_before_word_onset=int(bins_start_before_word_onset_seconds*neuroprobe_config.SAMPLING_RATE), 
                                                                                         end_neural_data_after_word_onset=int(bins_end_after_word_onset_seconds*neuroprobe_config.SAMPLING_RATE),
-                                                                                        lite=lite, allow_partial_cache=True)
+                                                                                        lite=lite, nano=nano, allow_partial_cache=True)
     elif splits_type == "SS_DM":
         train_datasets, test_datasets = neuroprobe_train_test_splits.generate_splits_SS_DM(subject, trial_id, eval_name, dtype=torch.float32, 
                                                                                         output_indices=False, 
@@ -136,7 +160,7 @@ for eval_name in eval_names:
                                                                                         output_indices=False, 
                                                                                         start_neural_data_before_word_onset=int(bins_start_before_word_onset_seconds*neuroprobe_config.SAMPLING_RATE), 
                                                                                         end_neural_data_after_word_onset=int(bins_end_after_word_onset_seconds*neuroprobe_config.SAMPLING_RATE),
-                                                                                        lite=lite, allow_partial_cache=True)
+                                                                                        lite=lite, nano=nano, allow_partial_cache=True)
         train_datasets = [train_datasets]
         test_datasets = [test_datasets]
 
@@ -160,11 +184,14 @@ for eval_name in eval_names:
             log("Preparing and preprocessing data...", priority=2, indent=1)
 
             # Convert PyTorch dataset to numpy arrays for scikit-learn
-            X_train = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), preprocess) for item in train_dataset])
+            X_train = torch.cat([item[0][:, data_idx_from:data_idx_to].unsqueeze(0) for item in train_dataset], dim=0)
             y_train = np.array([item[1] for item in train_dataset])
-            X_test = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), preprocess) for item in test_dataset])
+            X_test = torch.cat([item[0][:, data_idx_from:data_idx_to].unsqueeze(0) for item in test_dataset], dim=0)
             y_test = np.array([item[1] for item in test_dataset])
             gc.collect()  # Collect after creating large arrays
+
+            X_train = preprocess_data(X_train, preprocess_type, preprocess_parameters).float().numpy()
+            X_test = preprocess_data(X_test, preprocess_type, preprocess_parameters).float().numpy()
 
             if splits_type == "DS_DM":
                 if verbose: log("Combining regions...", priority=2, indent=1)
@@ -261,11 +288,15 @@ for eval_name in eval_names:
             results_population["one_second_after_onset"] = bin_results # one second after onset results
         else:
             results_population["time_bins"].append(bin_results) # time bin results
+    
+    regression_run_time = time.time() - start_time
+    if verbose:
+        log(f"Regression run in {regression_run_time:.2f} seconds", priority=0)
 
     results = {
         "model_name": model_name,
         "author": "Andrii Zahorodnii",
-        "description": f"Simple {model_name} using all electrodes ({preprocess if preprocess != 'none' else 'voltage'}).",
+        "description": f"Simple {model_name} using all electrodes ({preprocess_type if preprocess_type != 'none' else 'voltage'}).",
         "organization": "MIT",
         "organization_url": "https://azaho.org/",
         "timestamp": time.time(),
@@ -276,9 +307,21 @@ for eval_name in eval_names:
             }
         },
 
-        "nperseg": nperseg,
-        "only_1second": only_1second,
-        "seed": seed
+        "config": {
+            "preprocess": preprocess_parameters,
+
+            "only_1second": only_1second,
+            "seed": seed,
+            "subject_id": subject_id,
+            "trial_id": trial_id,
+            "splits_type": splits_type,
+            "classifier_type": classifier_type,
+        },
+
+        "timing": {
+            "subject_load_time": subject_load_time,
+            "regression_run_time": regression_run_time,
+        }
     }
 
     with open(file_save_path, "w") as f:

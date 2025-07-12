@@ -78,6 +78,27 @@ NEUROPROBE_TASKS = [
     "word_part_speech",
     "speaker"
 ]
+NEUROPROBE_TASKS_MAPPING = {
+    'onset': 'Sentence Onset',
+    'speech': 'Speech',
+    'volume': 'Volume', 
+    'pitch': 'Voice Pitch',
+    'speaker': 'Speaker Identity',
+    'delta_volume': 'Delta Volume',
+    'delta_pitch': 'Delta Pitch',
+    'gpt2_surprisal': 'GPT-2 Surprisal',
+    'word_length': 'Word Length',
+    'word_gap': 'Inter-word Gap',
+    'word_index': 'Word Position',
+    'word_head_pos': 'Head Word Position',
+    'word_part_speech': 'Part of Speech',
+    'frame_brightness': 'Frame Brightness',
+    'global_flow': 'Global Optical Flow',
+    'local_flow': 'Local Optical Flow',
+    'global_flow_angle': 'Global Flow Angle',
+    'local_flow_angle': 'Local Flow Angle',
+    'face_num': 'Number of Faces',
+}
 
 # Only used for the "Full" Neuroprobe dataset
 NEUROPROBE_FULL_SUBJECT_TRIALS = [

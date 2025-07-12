@@ -44,9 +44,9 @@ declare -a eval_names=(
 )
 declare -a preprocess=(
     'none' # no preprocessing, just raw voltage
-    #'fft_absangle', # magnitude and phase after FFT
-    #'fft_realimag' # real and imaginary parts after FFT
-    #'fft_abs' # just magnitude after FFT ("spectrogram")
+    #'stft_absangle', # magnitude and phase after FFT
+    #'stft_realimag' # real and imaginary parts after FFT
+    #'stft_abs' # just magnitude after FFT ("spectrogram")
 
     #'remove_line_noise' # remove line noise from the raw voltage
     #'downsample_200' # downsample to 200 Hz
@@ -81,6 +81,18 @@ SPLITS_TYPE=${splits_type[$SPLITS_TYPE_IDX]}
 CLASSIFIER_TYPE=${classifier_type[$CLASSIFIER_TYPE_IDX]}
 save_dir="data/eval_results_lite_${SPLITS_TYPE}"
 
-echo "Running eval for eval $EVAL_NAME, subject $SUBJECT, trial $TRIAL, preprocess $PREPROCESS, classifier $CLASSIFIER_TYPE --save_dir $save_dir --splits_type $SPLITS_TYPE --only_1second"
+echo "Running eval for eval $EVAL_NAME, subject $SUBJECT, trial $TRIAL, preprocess $PREPROCESS, classifier $CLASSIFIER_TYPE"
+echo "Save dir: $save_dir"
+echo "Split type: $SPLITS_TYPE"
+
 # Add the -u flag to Python to force unbuffered output
-python -u eval_population.py --eval_name $EVAL_NAME --subject $SUBJECT --trial $TRIAL --preprocess $PREPROCESS --verbose --save_dir $save_dir --lite --splits_type $SPLITS_TYPE --classifier_type $CLASSIFIER_TYPE --only_1second
+python -u eval_population.py \
+    --eval_name $EVAL_NAME \
+    --subject_id $SUBJECT \
+    --trial_id $TRIAL \
+    --preprocess.type $PREPROCESS \
+    --verbose \
+    --save_dir $save_dir \
+    --split_type $SPLITS_TYPE \
+    --classifier_type $CLASSIFIER_TYPE \
+    --only_1second

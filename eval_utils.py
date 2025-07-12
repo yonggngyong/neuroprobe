@@ -39,62 +39,101 @@ def log(message, priority=0, indent=0):
 
 from scipy import signal
 import numpy as np
-def compute_stft(data, fs=2048, preprocess="fft_abs"):
-    """Compute spectrogram with both power and phase information for a single trial of data.
-    
-    Args:
-        data (numpy.ndarray): Input voltage data of shape (n_channels, n_samples) or (batch_size, n_channels, n_samples)
-        fs (int): Sampling frequency in Hz
-        max_freq (int): Maximum frequency to include in Hz
-    
-    Returns:
-        numpy.ndarray: Real-valued spectrogram representation containing both magnitude and phase information
-                      Shape: (..., 2, n_freqs, n_times) where the 2 represents [magnitude, phase]
-    """
-    # For 1 second of data at 2048Hz, we'll use larger window
-    #nperseg = 256  # 125 ms window
-    #nperseg //= 2
-    #noverlap = nperseg // 4 * 3 # 75% overlap
-    noverlap = 0 # 0% overlap
-    
-    # Use STFT to get complex-valued coefficients
-    f, t, Zxx = signal.stft(
-        data,
-        fs=fs, 
-        nperseg=nperseg,
-        noverlap=noverlap,
-        window='boxcar'
-    ) # Zxx shape: (n_channels, n_freqs, n_times)
 
+def preprocess_stft(data, max_frequency=200, sampling_rate=2048, preprocess="stft_abs", preprocess_parameters={"stft": {"nperseg": 512, "poverlap": 0.875}}):
+    was_tensor = isinstance(data, torch.Tensor)
+    x = torch.from_numpy(data) if not was_tensor else data
 
-    if preprocess == "fft_absangle":
+    if len(x.shape) == 2: # if it is only (n_electrodes, n_samples)
+        x = x.unsqueeze(0)
+    # data is of shape (batch_size, n_electrodes, n_samples)
+    batch_size, n_electrodes, n_samples = x.shape
+
+    # convert to float32 and reshape for STFT
+    x = x.to(dtype=torch.float32)
+    x = x.reshape(batch_size * n_electrodes, -1)
+
+    # STFT parameters
+    nperseg = preprocess_parameters["stft"]["nperseg"]
+    poverlap = preprocess_parameters["stft"]["poverlap"]
+    noverlap = int(nperseg * poverlap)
+    window = torch.hann_window(nperseg, device=x.device)
+    hop_length = nperseg - noverlap
+    
+    # Compute STFT
+    x = torch.stft(x,
+                    n_fft=nperseg, 
+                    hop_length=hop_length,
+                    win_length=nperseg,
+                    window=window,
+                    return_complex=True,
+                    normalized=False,
+                    center=True)
+    # Get frequency bins
+    freqs = torch.fft.rfftfreq(nperseg, d=1.0/sampling_rate) # 2048Hz sampling rate
+    x = x[:, freqs <= max_frequency]
+
+    if preprocess == "stft_absangle":
         # Split complex values into magnitude and phase
-        magnitude = np.abs(Zxx)
-        phase = np.angle(Zxx)
+        magnitude = torch.abs(x)
+        phase = torch.angle(x)
         # Stack magnitude and phase along a new axis
-        return np.stack([magnitude, phase], axis=-2)
-    elif preprocess == "fft_realimag":
-        real = np.real(Zxx)
-        imag = np.imag(Zxx)
-        return np.stack([real, imag], axis=-2)
-    else:   
-        magnitude = np.abs(Zxx)
-        return magnitude
+        x = torch.stack([magnitude, phase], dim=-2)
+    elif preprocess == "stft_realimag":
+        real = torch.real(x)
+        imag = torch.imag(x)
+        x = torch.stack([real, imag], dim=-2)
+    elif preprocess == "stft_abs":   
+        x = torch.abs(x)
+    else:
+        raise ValueError(f"Invalid preprocess type: {preprocess}")
+
+    # Reshape back
+    _, n_freqs, n_times = x.shape
+    x = x.reshape(batch_size, n_electrodes, n_freqs, n_times)
+    x = x.transpose(2, 3) # (batch_size, n_electrodes, n_timebins, n_freqs)
+    
+    # Z-score normalization
+    x = x - x.mean(dim=[0, 2], keepdim=True)
+    x = x / (x.std(dim=[0, 2], keepdim=True) + 1e-5)
+
+    return x.numpy() if not was_tensor else x
+
 def downsample(data, fs=2048, downsample_rate=200):
-    return signal.resample_poly(data, up=fs, down=downsample_rate, axis=-1)
+    # Handle both numpy arrays and torch tensors
+    was_tensor = isinstance(data, torch.Tensor)
+    if was_tensor:
+        device = data.device
+        data_np = data.cpu().numpy()
+    else:
+        data_np = data
+    
+    # Apply downsampling
+    result = signal.resample_poly(data_np, up=fs, down=downsample_rate, axis=-1)
+    
+    # Convert back to tensor if input was a tensor
+    if was_tensor:
+        result = torch.from_numpy(result).to(device)
+    
+    return result
 def remove_line_noise(data, fs=2048, line_freq=60):
     """Remove line noise (60 Hz and harmonics) from neural data.
     
     Args:
-        data (numpy.ndarray): Input voltage data of shape (n_channels, n_samples) or (batch_size, n_channels, n_samples)
+        data (numpy.ndarray or torch.Tensor): Input voltage data of shape (n_channels, n_samples) or (batch_size, n_channels, n_samples)
         fs (int): Sampling frequency in Hz
         line_freq (int): Fundamental line frequency in Hz (typically 60 Hz in the US)
         
     Returns:
-        numpy.ndarray: Filtered data with the same shape as input
+        numpy.ndarray or torch.Tensor: Filtered data with the same shape as input (same type as input)
     """
-    # Make a copy of the data to avoid modifying the original
-    filtered_data = data.copy()
+    # Handle both numpy arrays and torch tensors
+    was_tensor = isinstance(data, torch.Tensor)
+    if was_tensor:
+        device = data.device
+        filtered_data = data.cpu().numpy().copy()
+    else:
+        filtered_data = data.copy()
     
     # Define the width of the notch filter (5 Hz on each side)
     bandwidth = 5.0
@@ -121,11 +160,16 @@ def remove_line_noise(data, fs=2048, line_freq=60):
             for i in range(filtered_data.shape[0]):
                 filtered_data[i] = signal.filtfilt(b, a, filtered_data[i], axis=1)
     
+    # Convert back to tensor if input was a tensor
+    if was_tensor:
+        filtered_data = torch.from_numpy(filtered_data).to(device)
+    
     return filtered_data
-def preprocess_data(data, preprocess):
+
+def preprocess_data(data, preprocess, preprocess_parameters):
     for preprocess_option in preprocess.split('-'):
-        if preprocess_option in ['fft_absangle', 'fft_realimag', 'fft_abs']:
-            data = compute_stft(data, preprocess=preprocess_option)
+        if preprocess_option in ['stft_absangle', 'stft_realimag', 'stft_abs']:
+            data = preprocess_stft(data, preprocess=preprocess_option, preprocess_parameters=preprocess_parameters)
         elif preprocess_option == 'remove_line_noise':
             data = remove_line_noise(data)
         elif preprocess_option == 'downsample_200':
