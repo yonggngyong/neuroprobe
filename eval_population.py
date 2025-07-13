@@ -35,6 +35,7 @@ parser.add_argument('--subject_id', type=int, required=True, help='Subject ID')
 parser.add_argument('--trial_id', type=int, required=True, help='Trial ID')
 
 parser.add_argument('--verbose', action='store_true', help='Whether to print progress')
+parser.add_argument('--overwrite', action='store_true', help='Whether to overwrite existing results')
 parser.add_argument('--save_dir', type=str, default='eval_results', help='Directory to save results')
 parser.add_argument('--seed', type=int, default=42, help='Random seed')
 
@@ -45,6 +46,8 @@ parser.add_argument('--nano', action='store_true', help='Whether to use Neuropro
 parser.add_argument('--preprocess.type', type=str, choices=preprocess_options, default='none', help=f'Preprocessing to apply to neural data ({", ".join(preprocess_options)})')
 parser.add_argument('--preprocess.stft.nperseg', type=int, default=512, help='Length of each segment for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
 parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.875, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.875, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.window', type=str, choices=['hann', 'boxcar'], default='hann', help='Window type for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
 
 parser.add_argument('--classifier_type', type=str, choices=['linear', 'cnn', 'transformer'], default='linear', help='Type of classifier to use for evaluation')
 args = parser.parse_args()
@@ -55,6 +58,7 @@ subject_id = args.subject_id
 trial_id = args.trial_id
 
 verbose = bool(args.verbose)
+overwrite = bool(args.overwrite)
 save_dir = args.save_dir
 seed = args.seed
 
@@ -69,7 +73,8 @@ preprocess_parameters = {
     "type": preprocess_type,
     "stft": {
         "nperseg": getattr(args, 'preprocess.stft.nperseg'),
-        "poverlap": getattr(args, 'preprocess.stft.poverlap')
+        "poverlap": getattr(args, 'preprocess.stft.poverlap'),
+        "window": getattr(args, 'preprocess.stft.window')
     }
 }
 
@@ -103,14 +108,10 @@ bin_ends += [1]
 
 # use cache=True to load this trial's neural data into RAM, if you have enough memory!
 # It will make the loading process faster.
-start_time = time.time()
 subject = BrainTreebankSubject(subject_id, allow_corrupted=False, cache=True, dtype=torch.float32)
 all_electrode_labels = neuroprobe_config.NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier] if lite else subject.electrode_labels
 subject.set_electrode_subset(all_electrode_labels)  # Use all electrodes
-subject.load_neural_data(trial_id)
-subject_load_time = time.time() - start_time
-if verbose:
-    log(f"Subject loaded in {subject_load_time:.2f} seconds", priority=0)
+neural_data_loaded = False
 
 for eval_name in eval_names:
     start_time = time.time()
@@ -118,13 +119,23 @@ for eval_name in eval_names:
     preprocess_suffix = f"{preprocess_type}" if preprocess_type != 'none' else 'voltage'
     preprocess_suffix += f"_nperseg{preprocess_parameters['stft']['nperseg']}" if preprocess_type.startswith('stft') else ''
     preprocess_suffix += f"_poverlap{preprocess_parameters['stft']['poverlap']}" if preprocess_type.startswith('stft') else ''
+    preprocess_suffix += f"_{preprocess_parameters['stft']['window']}" if preprocess_type.startswith('stft') and preprocess_parameters['stft']['window'] != 'hann' else ''
     file_save_dir = f"{save_dir}/{classifier_type}_{preprocess_suffix}"
     os.makedirs(file_save_dir, exist_ok=True) # Create save directory if it doesn't exist
 
     file_save_path = f"{file_save_dir}/population_{subject.subject_identifier}_{trial_id}_{eval_name}.json"
-    if os.path.exists(file_save_path):
+    if os.path.exists(file_save_path) and not overwrite:
         log(f"Skipping {file_save_path} because it already exists", priority=0)
         continue
+
+    # Load neural data if it hasn't been loaded yet; NOTE: this is done here to avoid unnecessary loading of neural data if the file is going to be skipped.
+    if not neural_data_loaded:
+        start_time = time.time()
+        subject.load_neural_data(trial_id)
+        subject_load_time = time.time() - start_time
+        if verbose:
+            log(f"Subject loaded in {subject_load_time:.2f} seconds", priority=0)
+        neural_data_loaded = True
 
     results_population = {
         "time_bins": [],

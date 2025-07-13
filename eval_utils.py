@@ -57,9 +57,15 @@ def preprocess_stft(data, max_frequency=200, sampling_rate=2048, preprocess="stf
     nperseg = preprocess_parameters["stft"]["nperseg"]
     poverlap = preprocess_parameters["stft"]["poverlap"]
     noverlap = int(nperseg * poverlap)
-    window = torch.hann_window(nperseg, device=x.device)
     hop_length = nperseg - noverlap
-    
+
+    if preprocess_parameters["stft"]["window"] == "hann":
+        window = torch.hann_window(nperseg, device=x.device)
+    elif preprocess_parameters["stft"]["window"] == "boxcar":
+        window = torch.ones(nperseg, device=x.device)
+    else:
+        raise ValueError(f"Invalid window type: {preprocess_parameters['stft']['window']}")
+
     # Compute STFT
     x = torch.stft(x,
                     n_fft=nperseg, 
