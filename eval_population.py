@@ -46,8 +46,9 @@ parser.add_argument('--nano', action='store_true', help='Whether to use Neuropro
 parser.add_argument('--preprocess.type', type=str, choices=preprocess_options, default='none', help=f'Preprocessing to apply to neural data ({", ".join(preprocess_options)})')
 parser.add_argument('--preprocess.stft.nperseg', type=int, default=512, help='Length of each segment for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
 parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.875, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
-parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.875, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
 parser.add_argument('--preprocess.stft.window', type=str, choices=['hann', 'boxcar'], default='hann', help='Window type for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.max_frequency', type=int, default=200, help='Maximum frequency (Hz) to keep after FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+
 
 parser.add_argument('--classifier_type', type=str, choices=['linear', 'cnn', 'transformer'], default='linear', help='Type of classifier to use for evaluation')
 args = parser.parse_args()
@@ -74,7 +75,8 @@ preprocess_parameters = {
     "stft": {
         "nperseg": getattr(args, 'preprocess.stft.nperseg'),
         "poverlap": getattr(args, 'preprocess.stft.poverlap'),
-        "window": getattr(args, 'preprocess.stft.window')
+        "window": getattr(args, 'preprocess.stft.window'),
+        "max_frequency": getattr(args, 'preprocess.stft.max_frequency')
     }
 }
 
@@ -120,6 +122,8 @@ for eval_name in eval_names:
     preprocess_suffix += f"_nperseg{preprocess_parameters['stft']['nperseg']}" if preprocess_type.startswith('stft') else ''
     preprocess_suffix += f"_poverlap{preprocess_parameters['stft']['poverlap']}" if preprocess_type.startswith('stft') else ''
     preprocess_suffix += f"_{preprocess_parameters['stft']['window']}" if preprocess_type.startswith('stft') and preprocess_parameters['stft']['window'] != 'hann' else ''
+    preprocess_suffix += f"_maxfreq{preprocess_parameters['stft']['max_frequency']}" if preprocess_type.startswith('stft') and preprocess_parameters['stft']['max_frequency'] != 200 else ''
+
     file_save_dir = f"{save_dir}/{classifier_type}_{preprocess_suffix}"
     os.makedirs(file_save_dir, exist_ok=True) # Create save directory if it doesn't exist
 

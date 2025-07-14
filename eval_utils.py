@@ -40,7 +40,7 @@ def log(message, priority=0, indent=0):
 from scipy import signal
 import numpy as np
 
-def preprocess_stft(data, max_frequency=200, sampling_rate=2048, preprocess="stft_abs", preprocess_parameters={"stft": {"nperseg": 512, "poverlap": 0.875}}):
+def preprocess_stft(data, sampling_rate=2048, preprocess="stft_abs", preprocess_parameters={"stft": {"nperseg": 512, "poverlap": 0.875}}):
     was_tensor = isinstance(data, torch.Tensor)
     x = torch.from_numpy(data) if not was_tensor else data
 
@@ -65,6 +65,8 @@ def preprocess_stft(data, max_frequency=200, sampling_rate=2048, preprocess="stf
         window = torch.ones(nperseg, device=x.device)
     else:
         raise ValueError(f"Invalid window type: {preprocess_parameters['stft']['window']}")
+    
+    max_frequency = preprocess_parameters["stft"]["max_frequency"]
 
     # Compute STFT
     x = torch.stft(x,
