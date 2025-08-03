@@ -102,8 +102,10 @@ def preprocess_stft(data, sampling_rate=2048, preprocess="stft_abs", preprocess_
     x = x.transpose(2, 3) # (batch_size, n_electrodes, n_timebins, n_freqs)
     
     # Z-score normalization
-    x = x - x.mean(dim=[0, 2], keepdim=True)
-    x = x / (x.std(dim=[0, 2], keepdim=True) + 1e-5)
+    # NOTE: skipping batch norm here because in the regression pipeline, StandardScaler is used anyway,
+    # and we would like to avoid batch effects in case input items are processed one by one. TODO: find a better idea here
+    # x = x - x.mean(dim=[0, 2], keepdim=True)
+    # x = x / (x.std(dim=[0, 2], keepdim=True) + 1e-5)
 
     return x.numpy() if not was_tensor else x
 
@@ -174,14 +176,101 @@ def remove_line_noise(data, fs=2048, line_freq=60):
     
     return filtered_data
 
-def preprocess_data(data, preprocess, preprocess_parameters):
+def laplacian_rereference_neural_data(electrode_data, electrode_labels, remove_non_laplacian=True):
+    """
+    Rereference the neural data using the laplacian method (subtract the mean of the neighbors, as determined by the electrode labels)
+    inputs:
+        electrode_data: torch tensor of shape (batch_size, n_electrodes, n_samples) or (n_electrodes, n_samples)
+        electrode_labels: list of electrode labels
+        remove_non_laplacian: boolean, if True, remove the non-laplacian electrodes from the data; if false, keep them without rereferencing
+    outputs:
+        rereferenced_data: torch tensor of shape (batch_size, n_electrodes_rereferenced, n_samples) or (n_electrodes_rereferenced, n_samples)
+        rereferenced_labels: list of electrode labels of length n_electrodes_rereferenced (n_electrodes_rereferenced could be different from n_electrodes if remove_non_laplacian is True)
+    """
+    def get_all_laplacian_electrodes(electrode_labels):
+        """
+            Get all laplacian electrodes for a given subject. This function is originally from
+            https://github.com/czlwang/BrainBERT repository (Wang et al., 2023)
+        """
+        def stem_electrode_name(name):
+            #names look like 'O1aIb4', 'O1aIb5', 'O1aIb6', 'O1aIb7'
+            #names look like 'T1b2
+            found_stem_end = False
+            stem, num = [], []
+            for c in reversed(name):
+                if c.isalpha():
+                    found_stem_end = True
+                if found_stem_end:
+                    stem.append(c)
+                else:
+                    num.append(c)
+            return ''.join(reversed(stem)), int(''.join(reversed(num)))
+        def has_neighbors(stem, stems):
+            (x,y) = stem
+            return ((x,y+1) in stems) or ((x,y-1) in stems)
+        def get_neighbors(stem, stems):
+            (x,y) = stem
+            return [f'{x}{y}' for (x,y) in [(x,y+1), (x,y-1)] if (x, y) in stems]
+        stems = [stem_electrode_name(e) for e in electrode_labels]
+        laplacian_stems = [x for x in stems if has_neighbors(x, stems)]
+        electrodes = [f'{x}{y}' for (x,y) in laplacian_stems]
+        neighbors = {e: get_neighbors(stem_electrode_name(e), stems) for e in electrodes}
+        return electrodes, neighbors
+
+    # Handle both numpy arrays and torch tensors
+    was_tensor = isinstance(electrode_data, torch.Tensor)
+
+    batch_unsqueeze = False
+    if len(electrode_data.shape) == 2:
+        batch_unsqueeze = True
+        if was_tensor:
+            electrode_data = electrode_data.unsqueeze(0)
+        else:
+            electrode_data = electrode_data[np.newaxis, :, :]
+
+    laplacian_electrodes, laplacian_neighbors = get_all_laplacian_electrodes(electrode_labels)
+    laplacian_neighbor_indices = {laplacian_electrode_label: [electrode_labels.index(neighbor_label) for neighbor_label in neighbors] for laplacian_electrode_label, neighbors in laplacian_neighbors.items()}
+
+    batch_size, n_electrodes, n_samples = electrode_data.shape
+    rereferenced_n_electrodes = len(laplacian_electrodes) if remove_non_laplacian else n_electrodes
+    if was_tensor:
+        rereferenced_data = torch.zeros((batch_size, rereferenced_n_electrodes, n_samples), dtype=electrode_data.dtype, device=electrode_data.device)
+    else:
+        rereferenced_data = np.zeros((batch_size, rereferenced_n_electrodes, n_samples), dtype=electrode_data.dtype)
+
+    electrode_i = 0
+    original_electrode_indices = []
+    for original_electrode_index, electrode_label in enumerate(electrode_labels):
+        if electrode_label in laplacian_electrodes:
+            rereferenced_data[:, electrode_i] = electrode_data[:, electrode_i] - electrode_data[:, laplacian_neighbor_indices[electrode_label]].mean(axis=1)
+            original_electrode_indices.append(original_electrode_index)
+            electrode_i += 1
+        else:
+            if remove_non_laplacian: 
+                continue # just skip the non-laplacian electrodes
+            else:
+                rereferenced_data[:, electrode_i] = electrode_data[:, electrode_i]
+                original_electrode_indices.append(original_electrode_index)
+                electrode_i += 1
+                
+    if batch_unsqueeze:
+        if was_tensor:
+            rereferenced_data = rereferenced_data.squeeze(0)
+        else:
+            rereferenced_data = rereferenced_data.squeeze(0)
+
+    return rereferenced_data, laplacian_electrodes if remove_non_laplacian else electrode_labels, original_electrode_indices
+
+def preprocess_data(data, electrode_labels, preprocess, preprocess_parameters):
     for preprocess_option in preprocess.split('-'):
-        if preprocess_option in ['stft_absangle', 'stft_realimag', 'stft_abs']:
+        if preprocess_option.lower() in ['stft_absangle', 'stft_realimag', 'stft_abs']:
             data = preprocess_stft(data, preprocess=preprocess_option, preprocess_parameters=preprocess_parameters)
-        elif preprocess_option == 'remove_line_noise':
+        elif preprocess_option.lower() == 'remove_line_noise':
             data = remove_line_noise(data)
-        elif preprocess_option == 'downsample_200':
+        elif preprocess_option.lower() == 'downsample_200':
             data = downsample(data, downsample_rate=200)
+        elif preprocess_option.lower() == 'laplacian':
+            data, electrode_labels, original_electrode_indices = laplacian_rereference_neural_data(data, electrode_labels, remove_non_laplacian=False)
     return data
 
 

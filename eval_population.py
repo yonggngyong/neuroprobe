@@ -29,7 +29,7 @@ splits_options = [
 ]
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--eval_name', type=str, default='onset', choices=neuroprobe_config.NEUROPROBE_TASKS, help='Evaluation name(s) (e.g. onset, gpt2_surprisal). If multiple, separate with commas.')
+parser.add_argument('--eval_name', type=str, default='onset', help='Evaluation name(s) (e.g. onset, gpt2_surprisal). If multiple, separate with commas.')
 parser.add_argument('--split_type', type=str, choices=splits_options, default='SS_SM', help=f'Type of splits to use ({", ".join(splits_options)})')
 parser.add_argument('--subject_id', type=int, required=True, help='Subject ID')
 parser.add_argument('--trial_id', type=int, required=True, help='Trial ID')
@@ -45,9 +45,9 @@ parser.add_argument('--nano', action='store_true', help='Whether to use Neuropro
 
 parser.add_argument('--preprocess.type', type=str, choices=preprocess_options, default='none', help=f'Preprocessing to apply to neural data ({", ".join(preprocess_options)})')
 parser.add_argument('--preprocess.stft.nperseg', type=int, default=512, help='Length of each segment for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
-parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.875, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.75, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
 parser.add_argument('--preprocess.stft.window', type=str, choices=['hann', 'boxcar'], default='hann', help='Window type for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
-parser.add_argument('--preprocess.stft.max_frequency', type=int, default=200, help='Maximum frequency (Hz) to keep after FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.max_frequency', type=int, default=150, help='Maximum frequency (Hz) to keep after FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
 
 
 parser.add_argument('--classifier_type', type=str, choices=['linear', 'cnn', 'transformer'], default='linear', help='Type of classifier to use for evaluation')
@@ -88,8 +88,8 @@ model_name = model_name_from_classifier_type(classifier_type)
 np.random.seed(seed)
 torch.manual_seed(seed)
 
-bins_start_before_word_onset_seconds = 0.5# if not only_1second else 0
-bins_end_after_word_onset_seconds = 1.5# if not only_1second else 1
+bins_start_before_word_onset_seconds = 0.5 if not only_1second else 0
+bins_end_after_word_onset_seconds = 1.5 if not only_1second else 1
 bin_size_seconds = 0.25
 bin_step_size_seconds = 0.125
 
@@ -110,8 +110,13 @@ bin_ends += [1]
 
 # use cache=True to load this trial's neural data into RAM, if you have enough memory!
 # It will make the loading process faster.
-subject = BrainTreebankSubject(subject_id, allow_corrupted=False, cache=True, dtype=torch.float32)
-all_electrode_labels = neuroprobe_config.NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier] if lite else subject.electrode_labels
+subject = BrainTreebankSubject(subject_id, cache=True, dtype=torch.float32)
+if nano:
+    all_electrode_labels = neuroprobe_config.NEUROPROBE_NANO_ELECTRODES[subject.subject_identifier]
+elif lite:
+    all_electrode_labels = neuroprobe_config.NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier]
+else:
+    all_electrode_labels = subject.electrode_labels
 subject.set_electrode_subset(all_electrode_labels)  # Use all electrodes
 neural_data_loaded = False
 
@@ -151,13 +156,13 @@ for eval_name in eval_names:
                                                                                         output_indices=False, 
                                                                                         start_neural_data_before_word_onset=int(bins_start_before_word_onset_seconds*neuroprobe_config.SAMPLING_RATE), 
                                                                                         end_neural_data_after_word_onset=int(bins_end_after_word_onset_seconds*neuroprobe_config.SAMPLING_RATE),
-                                                                                        lite=lite, nano=nano, allow_partial_cache=True)
+                                                                                        lite=lite, nano=nano)
     elif splits_type == "SS_DM":
         train_datasets, test_datasets = neuroprobe_train_test_splits.generate_splits_SS_DM(subject, trial_id, eval_name, dtype=torch.float32, 
                                                                                         output_indices=False, 
                                                                                         start_neural_data_before_word_onset=int(bins_start_before_word_onset_seconds*neuroprobe_config.SAMPLING_RATE), 
                                                                                         end_neural_data_after_word_onset=int(bins_end_after_word_onset_seconds*neuroprobe_config.SAMPLING_RATE),
-                                                                                        lite=lite, allow_partial_cache=True)
+                                                                                        lite=lite)
         train_datasets = [train_datasets]
         test_datasets = [test_datasets]
     elif splits_type == "DS_DM":
@@ -175,7 +180,7 @@ for eval_name in eval_names:
                                                                                         output_indices=False, 
                                                                                         start_neural_data_before_word_onset=int(bins_start_before_word_onset_seconds*neuroprobe_config.SAMPLING_RATE), 
                                                                                         end_neural_data_after_word_onset=int(bins_end_after_word_onset_seconds*neuroprobe_config.SAMPLING_RATE),
-                                                                                        lite=lite, nano=nano, allow_partial_cache=True)
+                                                                                        lite=lite, nano=nano)
         train_datasets = [train_datasets]
         test_datasets = [test_datasets]
 
@@ -199,14 +204,11 @@ for eval_name in eval_names:
             log("Preparing and preprocessing data...", priority=2, indent=1)
 
             # Convert PyTorch dataset to numpy arrays for scikit-learn
-            X_train = torch.cat([item[0][:, data_idx_from:data_idx_to].unsqueeze(0) for item in train_dataset], dim=0)
+            X_train = np.concatenate([preprocess_data(item[0][:, data_idx_from:data_idx_to].unsqueeze(0), all_electrode_labels, preprocess_type, preprocess_parameters).float().numpy() for item in train_dataset], axis=0)
             y_train = np.array([item[1] for item in train_dataset])
-            X_test = torch.cat([item[0][:, data_idx_from:data_idx_to].unsqueeze(0) for item in test_dataset], dim=0)
+            X_test = np.concatenate([preprocess_data(item[0][:, data_idx_from:data_idx_to].unsqueeze(0), all_electrode_labels, preprocess_type, preprocess_parameters).float().numpy() for item in test_dataset], axis=0)
             y_test = np.array([item[1] for item in test_dataset])
             gc.collect()  # Collect after creating large arrays
-
-            X_train = preprocess_data(X_train, preprocess_type, preprocess_parameters).float().numpy()
-            X_test = preprocess_data(X_test, preprocess_type, preprocess_parameters).float().numpy()
 
             if splits_type == "DS_DM":
                 if verbose: log("Combining regions...", priority=2, indent=1)
