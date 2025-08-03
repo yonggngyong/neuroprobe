@@ -29,14 +29,77 @@ def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):
     # Path format to electrode labels file -- mapping each ID to an subject specific label
     electrode_labels_file = os.path.join(ROOT_DIR, f'electrode_labels/sub_{sub_id}/electrode_labels.json')
 
+    if verbose: print(f"Working with movie {title} ({movie_id})")
+
     if verbose: print(f"Computing words dataframe for subject {sub_id} trial {trial_id}")
     trigs_df = pd.read_csv(trigger_times_file)
     words_df = pd.read_csv(transcript_file_format.format(movie_id)).set_index('Unnamed: 0')
     words_df = words_df.drop(['word_diff', 'onset_diff'], axis=1) # remove those columns because they are unnecessary and cause excessive filtering with NaN values
-    
+
+    # Fix the 'sentence' column to never split words like "gonna" into "gon na". NOTE: actually no need to do it here, the full_word column fixes it later.
+    # words_df['sentence'] = words_df['sentence'].str.replace(' na ', 'na ').replace(' na.', 'na.').replace(' na?', 'na?').replace(' na!', 'na!')
+    # words_df['sentence'] = words_df['sentence'].str.replace(' ta ', 'ta ').replace(' ta.', 'ta.').replace(' ta?', 'ta?').replace(' ta!', 'ta!')
+
+    # Add context (this is to provide the sentence just before the word) 
+    # and full_word column (words before and after). This is to handle "split-word" parts like I'm, I've, I'd, gonna, can't etc.
+    words_df['context'] = ''
+    words_df['char_in_sentence'] = 0
+    words_df['full_word'] = ''
+    words_df['is_word_suffix'] = False
+    for i in range(len(words_df)):
+        sentence = words_df.loc[i, 'sentence']
+        text = words_df.loc[i, 'text']
+        if pd.isna(text): continue
+
+        # Find character position in sentence
+        if i > 0 and words_df.loc[i, 'sentence'] == words_df.loc[i-1, 'sentence']:
+            # Same sentence as previous word, search after previous word's position
+            prev_char_pos = int(words_df.loc[i-1, 'char_in_sentence'])
+            char_in_sentence = sentence[prev_char_pos:].find(text) + prev_char_pos
+        else:
+            # First word in sentence or different sentence
+            char_in_sentence = sentence.find(text)
+        char_in_sentence = int(char_in_sentence)
+        
+        words_df.loc[i, 'context'] = sentence[:char_in_sentence].strip()
+        words_df.loc[i, 'full_word'] = text
+        words_df.loc[i, 'char_in_sentence'] = int(char_in_sentence) + len(text)
+        # if the next word starts with the current word, then it is part of the current word -- parts like I'm, I've, I'd, gonna, can't etc.
+        if (i<len(words_df)-1):
+            next_word_text = words_df.loc[i+1, 'text']
+            current_word_start_time = words_df.loc[i, 'start']
+            next_word_start_time = words_df.loc[i+1, 'start']
+            current_word_end_time = words_df.loc[i, 'end']
+            next_word_end_time = words_df.loc[i+1, 'end']
+            if (type(next_word_text) == str and 
+                len(sentence) > char_in_sentence + len(text)):
+                if sentence[char_in_sentence + len(text):].startswith(next_word_text):
+                    words_df.loc[i, 'full_word'] = text + next_word_text
+                    words_df.loc[i+1, 'is_word_suffix'] = True
+                    if verbose: print(f"On index {i+1}, word {next_word_text} is a suffix of {text}")
+                if next_word_start_time==current_word_start_time or next_word_end_time==current_word_end_time:
+                    # No need to duplicate the word here.
+                    # words_df.loc[i, 'full_word'] = text + next_word_text
+
+                    words_df.loc[i+1, 'is_word_suffix'] = True
+                    if verbose: print(f"On index {i+1}, word {next_word_text} is a correction of {text}")
+
     # Store original index before any transformations
-    words_df['original_index'] = words_df.index.copy()    
-    words_df = words_df.dropna().reset_index(drop=True)
+    words_df['original_index'] = words_df.index.copy()
+    # Remove rows where is_word_suffix is True
+    words_df = words_df[~words_df['is_word_suffix']].copy()
+    # Remove rows where there are NaN values
+    words_df = words_df.dropna()
+    
+    # Assert no duplicate values in any of the movie time columns
+    for col in ['start', 'end']:
+        duplicates = words_df[col].duplicated()
+        if duplicates.any():
+            duplicate_indices = words_df[duplicates]['original_index'].tolist()
+            print(f"WARNING: Found duplicate values in column {col} at indices: {duplicate_indices}. Removing these rows.")
+            words_df = words_df[~duplicates].copy()
+        
+    words_df = words_df.reset_index(drop=True)
 
     # Vectorized sample index estimation
     def add_estimated_sample_index_vectorized(w_df, t_df):
@@ -71,7 +134,7 @@ def obtain_aligned_words_df(sub_id, trial_id, verbose=True, save_to_dir=None):
     words_df = words_df[valid_words].reset_index(drop=True)
 
     # Keep only the columns that were added in the code and the original index
-    columns_to_keep = ['original_index', est_idx_col, est_end_idx_col, start_col, end_col]
+    columns_to_keep = ['original_index', est_idx_col, est_end_idx_col, start_col, end_col, 'context', 'char_in_sentence', 'full_word']
     words_df = words_df[columns_to_keep]
 
     if verbose: print(f"Kept {len(words_df)} words after removing invalid windows")

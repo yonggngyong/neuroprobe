@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=e_p_lite          # Name of the job
-#SBATCH --ntasks=1             # 8 tasks total
-#SBATCH --cpus-per-task=2    # Request 8 CPU cores per GPU
+#SBATCH --job-name=e_p_lite
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=2  
 #SBATCH --mem=64G
 #####SBATCH --gres=gpu:1
-#SBATCH -t 12:00:00         # total run time limit (HH:MM:SS) (increased to 24 hours)
+#SBATCH -t 1:20:00
 #####SBATCH --constraint=24GB
 #SBATCH --exclude=dgx001,dgx002
-#SBATCH --array=1-684  # 285 if doing mini btbench
+#SBATCH --array=1-2052
 #SBATCH --output data/logs/%A_%a.out # STDOUT
 #SBATCH --error data/logs/%A_%a.err # STDERR
 #SBATCH -p use-everything
@@ -46,7 +46,8 @@ declare -a preprocess=(
     'none' # no preprocessing, just raw voltage
     #'stft_absangle', # magnitude and phase after FFT
     #'stft_realimag' # real and imaginary parts after FFT
-    #'stft_abs' # just magnitude after FFT ("spectrogram")
+    'stft_abs' # just magnitude after FFT ("spectrogram")
+    'laplacian-stft_abs' # just magnitude after FFT ("spectrogram")
 
     #'remove_line_noise' # remove line noise from the raw voltage
     #'downsample_200' # downsample to 200 Hz
