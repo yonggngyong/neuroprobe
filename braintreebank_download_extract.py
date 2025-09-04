@@ -101,7 +101,20 @@ for filename in os.listdir('braintreebank_zip'):
         except:
             print(f'Failed to extract.')
             failed += 1
-            
+    else:
+        # Move non-zip files to braintreebank directory
+        print(f'Moving {filename}...')
+        try:
+            import shutil
+            source_path = os.path.join('braintreebank_zip', filename)
+            dest_path = os.path.join('braintreebank', filename)
+            shutil.move(source_path, dest_path)
+            print(f'Done. Moved {filename} to braintreebank directory.')
+            successful += 1
+        except:
+            print(f'Failed to move.')
+            failed += 1
+
 # Check if braintreebank_zip directory is empty after extraction
 if os.path.exists('braintreebank_zip'):
     remaining_files = [f for f in os.listdir('braintreebank_zip') if not f.startswith('.')]
