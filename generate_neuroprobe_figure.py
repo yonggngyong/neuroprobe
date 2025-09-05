@@ -104,28 +104,6 @@ def parse_results_default(model):
 for model in models:
     model['parse_results_function'] = parse_results_default
 
-def parse_results_hara(model):
-    for task in task_name_mapping.keys():
-        subject_trial_means = []
-        for subject_id, trial_id in subject_trials:
-            pattern = f'/om2/user/hmor/btbench/eval_results_ds_dt_lite_desikan_killiany/DS-DT-FixedTrain-Lite_{task}_test_S{subject_id}T{trial_id}_*.json'
-            matching_files = glob.glob(pattern)
-            if matching_files:
-                filename = matching_files[0]  # Take the first matching file
-            else:
-                print(f"Warning: No matching file found for pattern {pattern}, skipping...")
-            
-            with open(filename, 'r') as json_file:
-                data = json.load(json_file)
-            data = data['final_auroc']
-            subject_trial_means.append(data)
-        performance_data[task][model['name']] = {
-            'mean': np.mean(subject_trial_means),
-            'sem': np.std(subject_trial_means) / np.sqrt(len(subject_trial_means))
-        }
-if split_type == 'DS_DM': # XXX remove this later, have a unified interface for all models
-    models[0]['parse_results_function'] = parse_results_hara
-
 def parse_results_popt(model):
     # Read the CSV file
     popt_data = pd.read_csv(model['eval_results_path'])
