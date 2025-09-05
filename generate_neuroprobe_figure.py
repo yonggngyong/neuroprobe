@@ -28,33 +28,18 @@ models = [
     {
         'name': 'Linear',
         'color_palette': 'viridis',
-        'eval_results_path': f'/om2/user/zaho/neuroprobe/data/eval_results_lite_{split_type}/linear_voltage/'
+        'eval_results_path': f'data/eval_results_lite_{split_type}/linear_voltage/'
     },
     {
         'name': 'Linear (spectrogram)',
         'color_palette': 'viridis', 
-        'eval_results_path': f'/om2/user/zaho/neuroprobe/data/eval_results_lite_{split_type}/linear_stft_abs_nperseg512_poverlap0.75_maxfreq150/'
+        'eval_results_path': f'data/eval_results_lite_{split_type}/linear_stft_abs_nperseg512_poverlap0.75_maxfreq150/'
     },
-    # {
-    #     'name': 'Linear (spectrogram)',
-    #     'color_palette': 'viridis',
-    #     'eval_results_path': f'/om2/user/zaho/btbench/eval_results_lite_{split_type}/linear_fft_abs/'
-    # },
-    # {
-    #     'name': 'BrainBERT',
-    #     'color_palette': 'plasma',
-    #     'eval_results_path': f'/om2/user/zaho/BrainBERT/eval_results_lite_{split_type}/brainbert_frozen_mean_granularity_{-1}/'
-    # },
-    # # {
-    # #     'name': 'PopT (frozen)',
-    # #     'color_palette': 'magma',
-    # #     'eval_results_path': f'/om2/user/zaho/btbench/eval_results_popt/population_frozen_{split_type}_results.csv'
-    # # },
-    # {
-    #     'name': 'PopT',
-    #     'color_palette': 'magma',
-    #     'eval_results_path': f'/om2/user/zaho/btbench/eval_results_popt/popt_{split_type}_results.csv'
-    # }
+    {
+        'name': 'Linear (laplacian+spectrogram)',
+        'color_palette': 'viridis', 
+        'eval_results_path': f'data/eval_results_lite_{split_type}/linear_laplacian-stft_abs_nperseg512_poverlap0.75_maxfreq150/'
+    },
 ]
 
 ### DEFINE TASK NAME MAPPING ###
