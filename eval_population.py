@@ -124,10 +124,10 @@ for eval_name in eval_names:
     start_time = time.time()
 
     preprocess_suffix = f"{preprocess_type}" if preprocess_type != 'none' else 'voltage'
-    preprocess_suffix += f"_nperseg{preprocess_parameters['stft']['nperseg']}" if preprocess_type.startswith('stft') else ''
-    preprocess_suffix += f"_poverlap{preprocess_parameters['stft']['poverlap']}" if preprocess_type.startswith('stft') else ''
-    preprocess_suffix += f"_{preprocess_parameters['stft']['window']}" if preprocess_type.startswith('stft') and preprocess_parameters['stft']['window'] != 'hann' else ''
-    preprocess_suffix += f"_maxfreq{preprocess_parameters['stft']['max_frequency']}" if preprocess_type.startswith('stft') and preprocess_parameters['stft']['max_frequency'] != 200 else ''
+    preprocess_suffix += f"_nperseg{preprocess_parameters['stft']['nperseg']}" if 'stft' in preprocess_type else ''
+    preprocess_suffix += f"_poverlap{preprocess_parameters['stft']['poverlap']}" if 'stft' in preprocess_type else ''
+    preprocess_suffix += f"_{preprocess_parameters['stft']['window']}" if 'stft' in preprocess_type and preprocess_parameters['stft']['window'] != 'hann' else ''
+    preprocess_suffix += f"_maxfreq{preprocess_parameters['stft']['max_frequency']}" if 'stft' in preprocess_type else ''
 
     file_save_dir = f"{save_dir}/{classifier_type}_{preprocess_suffix}"
     os.makedirs(file_save_dir, exist_ok=True) # Create save directory if it doesn't exist
