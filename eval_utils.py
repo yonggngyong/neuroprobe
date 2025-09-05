@@ -35,6 +35,18 @@ def log(message, priority=0, indent=0):
     print(f"[{current_time} gpu {gpu_memory_reserved:04.1f}G ram {ram_usage:05.1f}G] {' '*4*indent}{message}")
 
 
+############## ELECTRODE SUBSET ###############
+
+def subset_electrodes(subject, lite=False, nano=False):
+    all_electrode_labels = subject.electrode_labels
+    if lite:
+        all_electrode_labels = neuroprobe_config.NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier]
+    elif nano:
+        all_electrode_labels = neuroprobe_config.NEUROPROBE_NANO_ELECTRODES[subject.subject_identifier]
+    subject.set_electrode_subset(all_electrode_labels)  # Use all electrodes
+    return all_electrode_labels
+
+
 ############## DATA PREPROCESSING ###############
 
 from scipy import signal

@@ -111,13 +111,7 @@ bin_ends += [1]
 # use cache=True to load this trial's neural data into RAM, if you have enough memory!
 # It will make the loading process faster.
 subject = BrainTreebankSubject(subject_id, cache=True, dtype=torch.float32)
-if nano:
-    all_electrode_labels = neuroprobe_config.NEUROPROBE_NANO_ELECTRODES[subject.subject_identifier]
-elif lite:
-    all_electrode_labels = neuroprobe_config.NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier]
-else:
-    all_electrode_labels = subject.electrode_labels
-subject.set_electrode_subset(all_electrode_labels)  # Use all electrodes
+subset_electrodes(subject, lite=lite, nano=nano)
 neural_data_loaded = False
 
 for eval_name in eval_names:
@@ -157,6 +151,7 @@ for eval_name in eval_names:
                                                                                         start_neural_data_before_word_onset=int(bins_start_before_word_onset_seconds*neuroprobe_config.SAMPLING_RATE), 
                                                                                         end_neural_data_after_word_onset=int(bins_end_after_word_onset_seconds*neuroprobe_config.SAMPLING_RATE),
                                                                                         lite=lite, nano=nano)
+        train_subject = subject
     elif splits_type == "SS_DM":
         train_datasets, test_datasets = neuroprobe_train_test_splits.generate_splits_SS_DM(subject, trial_id, eval_name, dtype=torch.float32, 
                                                                                         output_indices=False, 
@@ -165,6 +160,7 @@ for eval_name in eval_names:
                                                                                         lite=lite)
         train_datasets = [train_datasets]
         test_datasets = [test_datasets]
+        train_subject = subject
     elif splits_type == "DS_DM":
         if verbose: log("Loading the training subject...", priority=0)
         train_subject_id = neuroprobe_config.DS_DM_TRAIN_SUBJECT_ID
@@ -204,9 +200,9 @@ for eval_name in eval_names:
             log("Preparing and preprocessing data...", priority=2, indent=1)
 
             # Convert PyTorch dataset to numpy arrays for scikit-learn
-            X_train = np.concatenate([preprocess_data(item[0][:, data_idx_from:data_idx_to].unsqueeze(0), all_electrode_labels, preprocess_type, preprocess_parameters).float().numpy() for item in train_dataset], axis=0)
+            X_train = np.concatenate([preprocess_data(item[0][:, data_idx_from:data_idx_to].unsqueeze(0), train_subject.electrode_labels, preprocess_type, preprocess_parameters).float().numpy() for item in train_dataset], axis=0)
             y_train = np.array([item[1] for item in train_dataset])
-            X_test = np.concatenate([preprocess_data(item[0][:, data_idx_from:data_idx_to].unsqueeze(0), all_electrode_labels, preprocess_type, preprocess_parameters).float().numpy() for item in test_dataset], axis=0)
+            X_test = np.concatenate([preprocess_data(item[0][:, data_idx_from:data_idx_to].unsqueeze(0), subject.electrode_labels, preprocess_type, preprocess_parameters).float().numpy() for item in test_dataset], axis=0)
             y_test = np.array([item[1] for item in test_dataset])
             gc.collect()  # Collect after creating large arrays
 
