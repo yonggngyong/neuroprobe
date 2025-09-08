@@ -7,7 +7,7 @@
 #SBATCH -t 1:20:00
 #####SBATCH --constraint=24GB
 #SBATCH --exclude=dgx001,dgx002
-#SBATCH --array=1-2052
+#SBATCH --array=1-108
 #SBATCH --output data/logs/%A_%a.out # STDOUT
 #SBATCH --error data/logs/%A_%a.err # STDERR
 #SBATCH -p use-everything
@@ -15,6 +15,7 @@
 nvidia-smi
 
 export PYTHONUNBUFFERED=1
+export ROOT_DIR_BRAINTREEBANK=/om2/user/zaho/braintreebank/braintreebank/
 source .venv/bin/activate
 
 # Use the BTBENCH_LITE_SUBJECT_TRIALS from btbench_config.py
@@ -42,6 +43,11 @@ declare -a eval_names=(
     "word_part_speech"
     "speaker"
 )
+# to make it sequential, just aggregate the eval_names separating with a comma
+eval_names=(
+    $(IFS=,; echo "${eval_names[*]}")
+)
+
 declare -a preprocess=(
     'none' # no preprocessing, just raw voltage
     #'stft_absangle', # magnitude and phase after FFT
@@ -85,6 +91,13 @@ save_dir="data/eval_results_lite_${SPLITS_TYPE}"
 echo "Running eval for eval $EVAL_NAME, subject $SUBJECT, trial $TRIAL, preprocess $PREPROCESS, classifier $CLASSIFIER_TYPE"
 echo "Save dir: $save_dir"
 echo "Split type: $SPLITS_TYPE"
+
+# Check if we're trying to evaluate subject 2 with DS_DM split (which is invalid)
+if [[ "$SPLITS_TYPE" == "DS_DM" && "$SUBJECT" == "2" ]]; then
+    echo "Cannot evaluate the cross subject split on subject 2; exiting"
+    exit 0
+fi
+
 
 # Add the -u flag to Python to force unbuffered output
 python -u eval_population.py \
