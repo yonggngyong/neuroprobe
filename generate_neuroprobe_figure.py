@@ -87,8 +87,12 @@ def parse_results_default(model):
                 print(f"Warning: File {filename} not found, skipping...")
                 continue
 
-            with open(filename, 'r') as json_file:
-                data = json.load(json_file)
+            try:
+                with open(filename, 'r') as json_file:
+                    data = json.load(json_file)
+            except:
+                print(f"Warning: Could not parse JSON file {filename}, skipping...")
+                continue
             
             if 'one_second_after_onset' in data['evaluation_results'][f'btbank{subject_id}_{trial_id}']['population']: # XXX remove this later, have a unified interface for all models
                 data = data['evaluation_results'][f'btbank{subject_id}_{trial_id}']['population']['one_second_after_onset'] 
@@ -262,8 +266,8 @@ fig.legend(handles, [model['name'] for model in models] + ["Chance"],
             frameon=False)
 
 # Adjust layout with space at the bottom for legend
-if (len(models)//3 == 2): rect_y = 0.2
-else: rect_y = 0.15
+if (len(models)//3 == 2): rect_y = 0.3
+else: rect_y = 0.18
 plt.tight_layout(rect=[0, rect_y, 1, 1], w_pad=0.4)
 
 # Save figure
