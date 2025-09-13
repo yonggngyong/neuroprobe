@@ -131,7 +131,7 @@ def downsample(data, fs=2048, downsample_rate=200):
         data_np = data
     
     # Apply downsampling
-    result = signal.resample_poly(data_np, up=fs, down=downsample_rate, axis=-1)
+    result = signal.resample_poly(data_np, up=downsample_rate, down=fs, axis=-1)
     
     # Convert back to tensor if input was a tensor
     if was_tensor:
@@ -281,6 +281,8 @@ def preprocess_data(data, electrode_labels, preprocess, preprocess_parameters):
             data = remove_line_noise(data)
         elif preprocess_option.lower() == 'downsample_200':
             data = downsample(data, downsample_rate=200)
+        elif preprocess_option.lower() == 'downsample_500':
+            data = downsample(data, downsample_rate=500)
         elif preprocess_option.lower() == 'laplacian':
             data, electrode_labels, original_electrode_indices = laplacian_rereference_neural_data(data, electrode_labels, remove_non_laplacian=False)
     return data
