@@ -87,9 +87,11 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
         if self.nano:
             nano_electrodes = NEUROPROBE_NANO_ELECTRODES[subject.subject_identifier]
             self.electrode_indices_subset = [subject.electrode_labels.index(e) for e in nano_electrodes if e in subject.electrode_labels]
+            self.electrode_labels_subset = [e for e in nano_electrodes if e in subject.electrode_labels]
         elif self.lite:
             lite_electrodes = NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier]
             self.electrode_indices_subset = [subject.electrode_labels.index(e) for e in lite_electrodes if e in subject.electrode_labels]
+            self.electrode_labels_subset = [e for e in lite_electrodes if e in subject.electrode_labels]
 
         eval_name_remapped = eval_name
         if eval_name in single_float_variables_name_remapping: eval_name_remapped = single_float_variables_name_remapping[eval_name]
@@ -242,6 +244,7 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
                 "data": input, 
                 "label": label, 
                 "electrode_labels": self.subject.electrode_labels,
+                "electrode_labels_subset" : self.electrode_labels_subset,
                 "metadata": {
                     "subject_identifier": self.subject.subject_identifier,
                     "trial_id": self.trial_id,

@@ -6,7 +6,7 @@ import os
 
 # It is recommended that all the paths are absolute!
 # Feel free to change this setting to your own directory.
-ROOT_DIR = os.environ['ROOT_DIR_BRAINTREEBANK'] # Root directory for the braintreebank data. Recommended to use the absolute path.
+ROOT_DIR = "/global/cfs/cdirs/m4727/DIVER/DIVER_FINETUNING_DATASET/BrainTreebank"
 
 # This comes together with the neuroprobe package
 SAVE_SUBJECT_TRIAL_DF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "braintreebank_features_time_alignment")

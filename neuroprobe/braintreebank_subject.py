@@ -12,16 +12,21 @@ class BrainTreebankSubject:
         This class is used to load the neural data for a given subject and trial.
         It also contains methods to get the data for a given electrode and trial, and to get the spectrogram for a given electrode and trial.
     """
-    def __init__(self, subject_id, allow_corrupted=False, allow_missing_coordinates=False, cache=False, dtype=torch.float32):
+    def __init__(self, subject_id, allow_corrupted=False, allow_missing_coordinates=False, cache=False, dtype=torch.float32,  DIVER_preprocess = False, forlmdb_500Hz = False, clip= 200):
         self.subject_id = subject_id
         self.subject_identifier = f'btbank{subject_id}'
         self.allow_corrupted = allow_corrupted
         self.allow_missing_coordinates = allow_missing_coordinates
         self.cache = cache
         self.dtype = dtype  # Store dtype as instance variable
-
+        self.DIVER_preprocess = DIVER_preprocess
+        self.forlmdb_500Hz = forlmdb_500Hz
         self.localization_data = self._load_localization_data()
         self.electrode_labels = self._get_all_electrode_names()
+        self.clip = clip
+        if self.forlmdb_500Hz:
+            print("500Hz for lmdb")
+
 
         self.h5_neural_data_keys = {e:"electrode_"+str(i) for i, e in enumerate(self.electrode_labels)} # only used for accessing the neural data in h5 files
         self.electrode_labels = self._filter_electrode_labels()
@@ -88,7 +93,18 @@ class BrainTreebankSubject:
         if trial_id in self.neural_data_cache and not force_cache: return  # no need to cache again
 
         # Open file with context manager to ensure proper closing
-        neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}.h5')
+        if self.forlmdb_500Hz:
+            neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}_preprocessed_500Hz_noclip.h5')
+        else:
+            if self.DIVER_preprocess:
+                if self.clip == 200 :
+                    neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}_preprocessed.h5')
+                elif self.clip == 1000 :
+                    neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}_preprocessed_clip1000.h5')
+                else:
+                    raise NotImplementedError(f"Clip value : {self.clip} is not ready yet")
+            else:
+                neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}.h5')
         with h5py.File(neural_data_file, 'r') as f:
             # Get data length first
             self.electrode_data_length[trial_id] = f['data'][self.h5_neural_data_keys[self.electrode_labels[0]]].shape[0]
@@ -151,7 +167,13 @@ class BrainTreebankSubject:
     def open_neural_data_file(self, trial_id):
         assert not self.cache, "Cache is enabled; Use cache_neural_data() instead."
         if trial_id in self.h5_files: return
-        neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}.h5')
+        if self.forlmdb_500Hz:
+            neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}_preprocessed_500Hz_noclip.h5')
+        else:
+            if self.DIVER_preprocess:
+                neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}_preprocessed.h5')
+            else:
+                neural_data_file = os.path.join(ROOT_DIR, f'sub_{self.subject_id}_trial{trial_id:03}.h5')
         self.h5_files[trial_id] = h5py.File(neural_data_file, 'r')
         self.electrode_data_length[trial_id] = self.h5_files[trial_id]['data'][self.h5_neural_data_keys[self.electrode_labels[0]]].shape[0]
     def load_neural_data(self, trial_id, cache_window_from=None, cache_window_to=None):
@@ -183,6 +205,29 @@ class BrainTreebankSubject:
                     electrode_row.iloc[0]['Z']
                 ], dtype=self.dtype)
         return electrode_coordinates
+
+    def get_electrode_coordinates_dict(self):
+        """
+            Get the coordinates of the electrodes for this subject
+            Returns:
+                    coordinates: (n_electrodes, 3) tensor of MNI coordinates (X, Y, Z) in mm
+        """
+        loc_file = os.path.join(ROOT_DIR, f'localization/elec_coords_full.csv')
+        df = pd.read_csv(loc_file)
+
+        # Remove asterisks from electrode names in the dataframe
+        df['Electrode'] = df['Electrode'].str.replace('*', '', regex=False)
+        
+        electrode_coordinates_dict = {}
+        for electrode_label in self.electrode_labels:
+            # Find the row for this electrode and subject
+            electrode_row = df[(df['Electrode'] == electrode_label) & (df['Subject'] == f'sub_{self.subject_id}')]
+            
+            if not electrode_row.empty:
+                xyz_list = torch.tensor([electrode_row.iloc[0]['X'], electrode_row.iloc[0]['Y'], electrode_row.iloc[0]['Z']],dtype=self.dtype).tolist()
+                electrode_coordinates_dict[electrode_label] = xyz_list
+
+        return electrode_coordinates_dict
 
     def get_electrode_metadata(self, electrode_label):
         """
