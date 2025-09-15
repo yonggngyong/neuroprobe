@@ -45,6 +45,8 @@ class BrainTreebankSubject:
         """
         self.electrode_labels = electrode_labels
         self.electrode_ids = {e:i for i, e in enumerate(self.electrode_labels)}
+        if self.cache:
+            self.clear_neural_data_cache() # clear the cache to avoid using the wrong electrodes
 
     def get_n_electrodes(self):
         return len(self.electrode_labels)

@@ -52,7 +52,8 @@ def subset_electrodes(subject, lite=False, nano=False):
 from scipy import signal
 import numpy as np
 
-def preprocess_stft(data, sampling_rate=2048, preprocess="stft_abs", preprocess_parameters={"stft": {"nperseg": 512, "poverlap": 0.875}}):
+def preprocess_stft(data, sampling_rate=2048, preprocess="stft_abs", 
+                    preprocess_parameters={"stft": {"nperseg": 512, "poverlap": 0.75, "window": "hann", "max_frequency": 150, "min_frequency": 0}}):
     was_tensor = isinstance(data, torch.Tensor)
     x = torch.from_numpy(data) if not was_tensor else data
 
@@ -79,6 +80,7 @@ def preprocess_stft(data, sampling_rate=2048, preprocess="stft_abs", preprocess_
         raise ValueError(f"Invalid window type: {preprocess_parameters['stft']['window']}")
     
     max_frequency = preprocess_parameters["stft"]["max_frequency"]
+    min_frequency = preprocess_parameters["stft"]["min_frequency"]
 
     # Compute STFT
     x = torch.stft(x,
@@ -91,7 +93,7 @@ def preprocess_stft(data, sampling_rate=2048, preprocess="stft_abs", preprocess_
                     center=True)
     # Get frequency bins
     freqs = torch.fft.rfftfreq(nperseg, d=1.0/sampling_rate) # 2048Hz sampling rate
-    x = x[:, freqs <= max_frequency]
+    x = x[:, (freqs >= min_frequency) & (freqs <= max_frequency)]
 
     if preprocess == "stft_absangle":
         # Split complex values into magnitude and phase

@@ -32,10 +32,16 @@ parser.add_argument('--subject', type=int, required=True, help='Subject ID')
 parser.add_argument('--trial', type=int, required=True, help='Trial ID')
 parser.add_argument('--verbose', action='store_true', help='Whether to print progress')
 parser.add_argument('--save_dir', type=str, default='eval_results', help='Directory to save results')
-parser.add_argument('--preprocess', type=str, default='none', help=f'Preprocessing to apply to neural data ({", ".join(preprocess_options)})')
+
+parser.add_argument('--preprocess.type', type=str, default='none', help=f'Preprocessing to apply to neural data ({", ".join(preprocess_options)})')
+parser.add_argument('--preprocess.stft.nperseg', type=int, default=512, help='Length of each segment for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.poverlap', type=float, default=0.75, help='Overlap percentage for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.window', type=str, choices=['hann', 'boxcar'], default='hann', help='Window type for FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.max_frequency', type=int, default=150, help='Maximum frequency (Hz) to keep after FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+parser.add_argument('--preprocess.stft.min_frequency', type=int, default=0, help='Minimum frequency (Hz) to keep after FFT calculation (only used if preprocess is stft_absangle, stft_realimag, or stft_abs)')
+
 parser.add_argument('--splits_type', type=str, choices=splits_options, default='SS_SM', help=f'Type of splits to use ({", ".join(splits_options)})')
 parser.add_argument('--seed', type=int, default=42, help='Random seed')
-parser.add_argument('--nperseg', type=int, default=256, help='Length of each segment for FFT calculation')
 parser.add_argument('--only_1second', action='store_true', help='Whether to only evaluate on 1 second after word onset')
 parser.add_argument('--lite', action='store_true', help='Whether to use the lite eval for Neuroprobe (which is the default)')
 parser.add_argument('--electrodes', type=str, default='all', help='Electrode labels to evaluate on. If multiple, separate with commas.')
@@ -52,9 +58,20 @@ electrodes = args.electrodes.split(',') if ',' in args.electrodes else [args.ele
 seed = args.seed
 lite = bool(args.lite)
 splits_type = args.splits_type
-nperseg = args.nperseg
-preprocess = args.preprocess
 classifier_type = args.classifier_type
+
+# Set up preprocessing parameters structure like in eval_population.py
+preprocess_type = getattr(args, 'preprocess.type')
+preprocess_parameters = {
+    "type": preprocess_type,
+    "stft": {
+        "nperseg": getattr(args, 'preprocess.stft.nperseg'),
+        "poverlap": getattr(args, 'preprocess.stft.poverlap'),
+        "window": getattr(args, 'preprocess.stft.window'),
+        "max_frequency": getattr(args, 'preprocess.stft.max_frequency'),
+        "min_frequency": getattr(args, 'preprocess.stft.min_frequency')
+    }
+}
 
 model_name = model_name_from_classifier_type(classifier_type)
 
@@ -90,7 +107,15 @@ if lite:
 all_electrode_labels = subject.electrode_labels if electrodes[0] == 'all' else electrodes
 
 for eval_name in eval_names:
-    save_dir = f"{save_dir}/{classifier_type}_{preprocess if preprocess != 'none' else 'voltage'}{'_nperseg' + str(nperseg) if nperseg != 256 else ''}_single_electrode"
+    # Update save directory to use preprocess_type and parameters like in eval_population.py
+    preprocess_suffix = f"{preprocess_type}" if preprocess_type != 'none' else 'voltage'
+    preprocess_suffix += f"_nperseg{preprocess_parameters['stft']['nperseg']}" if 'stft' in preprocess_type else ''
+    preprocess_suffix += f"_poverlap{preprocess_parameters['stft']['poverlap']}" if 'stft' in preprocess_type else ''
+    preprocess_suffix += f"_{preprocess_parameters['stft']['window']}" if 'stft' in preprocess_type and preprocess_parameters['stft']['window'] != 'hann' else ''
+    preprocess_suffix += f"_maxfreq{preprocess_parameters['stft']['max_frequency']}" if 'stft' in preprocess_type else ''
+    preprocess_suffix += f"_minfreq{preprocess_parameters['stft']['min_frequency']}" if 'stft' in preprocess_type and preprocess_parameters['stft']['min_frequency'] != 0 else ''
+
+    save_dir = f"{save_dir}/{classifier_type}_{preprocess_suffix}_single_electrode"
     os.makedirs(save_dir, exist_ok=True)
     filename = f"electrode_{subject.subject_identifier}_{trial_id}_{eval_name}.json"
     
@@ -164,10 +189,10 @@ for eval_name in eval_names:
                 train_dataset = train_datasets[fold_idx]
                 test_dataset = test_datasets[fold_idx]
 
-                # Convert PyTorch dataset to numpy arrays for scikit-learn
-                X_train = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), all_electrode_labels, preprocess, preprocess_parameters=None) for item in train_dataset]) # TODO: preprocess_parameters=None is a hack
+                # Convert PyTorch dataset to numpy arrays for scikit-learn - now using proper preprocess_parameters
+                X_train = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), all_electrode_labels, preprocess_type, preprocess_parameters) for item in train_dataset])
                 y_train = np.array([item[1] for item in train_dataset])
-                X_test = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), all_electrode_labels, preprocess, preprocess_parameters=None) for item in test_dataset])
+                X_test = np.array([preprocess_data(item[0][:, data_idx_from:data_idx_to].float().numpy(), all_electrode_labels, preprocess_type, preprocess_parameters) for item in test_dataset])
                 y_test = np.array([item[1] for item in test_dataset])
 
                 # Flatten the data after preprocessing
