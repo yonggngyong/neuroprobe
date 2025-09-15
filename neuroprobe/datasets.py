@@ -257,7 +257,6 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             return {
                 "data": input, 
                 "label": label, 
-                "electrode_labels": self.subject.electrode_labels,
                 "electrode_labels_subset" : self.electrode_labels_subset,
                 "electrode_labels": self.electrode_labels,
                 "electrode_coordinates": self.electrode_coordinates,
