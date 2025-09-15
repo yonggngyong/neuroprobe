@@ -87,13 +87,19 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
         if self.nano:
             nano_electrodes = NEUROPROBE_NANO_ELECTRODES[subject.subject_identifier]
             self.electrode_indices_subset = [subject.electrode_labels.index(e) for e in nano_electrodes if e in subject.electrode_labels]
+            self.electrode_labels = [subject.electrode_labels[i] for i in self.electrode_indices_subset]
             subject_trial = (subject.subject_id, self.trial_id)
             assert subject_trial in NEUROPROBE_NANO_SUBJECT_TRIALS, f"Subject {subject.subject_id} trial {self.trial_id} not in NEUROPROBE_NANO_SUBJECT_TRIALS"
         elif self.lite:
             lite_electrodes = NEUROPROBE_LITE_ELECTRODES[subject.subject_identifier]
             self.electrode_indices_subset = [subject.electrode_labels.index(e) for e in lite_electrodes if e in subject.electrode_labels]
+            self.electrode_labels = [subject.electrode_labels[i] for i in self.electrode_indices_subset]
             subject_trial = (subject.subject_id, self.trial_id)
             assert subject_trial in NEUROPROBE_LITE_SUBJECT_TRIALS, f"Subject {subject.subject_id} trial {self.trial_id} not in NEUROPROBE_LITE_SUBJECT_TRIALS"
+        else:
+            # use all electrode labels and indices
+            self.electrode_indices_subset = np.arange(len(subject.electrode_labels))
+            self.electrode_labels = subject.electrode_labels
 
         eval_name_remapped = eval_name
         if eval_name in single_float_variables_name_remapping: eval_name_remapped = single_float_variables_name_remapping[eval_name]
@@ -245,7 +251,7 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             return {
                 "data": input, 
                 "label": label, 
-                "electrode_labels": self.subject.electrode_labels,
+                "electrode_labels": self.electrode_labels,
                 "metadata": {
                     "subject_identifier": self.subject.subject_identifier,
                     "trial_id": self.trial_id,
