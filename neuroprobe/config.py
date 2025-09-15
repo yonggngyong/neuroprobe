@@ -9,8 +9,8 @@ import os
 ROOT_DIR = "/global/cfs/cdirs/m4727/DIVER/DIVER_FINETUNING_DATASET/BrainTreebank"
 
 # This comes together with the neuroprobe package
-SAVE_SUBJECT_TRIAL_DF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "braintreebank_features_time_alignment")
-PITCH_VOLUME_FEATURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pitch_volume_features") 
+SAVE_SUBJECT_TRIAL_DF_DIR = "/global/cfs/cdirs/m4727/DIVER/neuroprobe/neuroprobe/braintreebank_features_time_alignment"
+PITCH_VOLUME_FEATURES_DIR = "/global/cfs/cdirs/m4727/DIVER/neuroprobe/neuroprobe/neuroprobe/pitch_volume_features"
 
 # Disable file locking for HDF5 files. This is helpful for parallel processing.
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" 
