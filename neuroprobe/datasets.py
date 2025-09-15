@@ -100,6 +100,7 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
             # use all electrode labels and indices
             self.electrode_indices_subset = np.arange(len(subject.electrode_labels))
             self.electrode_labels = subject.electrode_labels
+        self.electrode_coordinates = subject.get_electrode_coordinates()[self.electrode_indices_subset]
 
         eval_name_remapped = eval_name
         if eval_name in single_float_variables_name_remapping: eval_name_remapped = single_float_variables_name_remapping[eval_name]
@@ -252,6 +253,7 @@ class BrainTreebankSubjectTrialBenchmarkDataset(Dataset):
                 "data": input, 
                 "label": label, 
                 "electrode_labels": self.electrode_labels,
+                "electrode_coordinates": self.electrode_coordinates,
                 "metadata": {
                     "subject_identifier": self.subject.subject_identifier,
                     "trial_id": self.trial_id,
